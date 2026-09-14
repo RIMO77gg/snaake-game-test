@@ -4,194 +4,42 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>لعبة الألغاز أونلاين</title>
-    <!-- استدعاء مكتبة PeerJS للربط المباشر بين الأجهزة عبر الإنترنت -->
+    <!-- استدعاء مكتبة PeerJS -->
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-            user-select: none;
-        }
-        body, html {
-            width: 100%;
-            height: 100%;
-            overflow: hidden;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: #0f172a;
-            color: #fff;
-        }
-
-        /* حاوية اللعبة بالشاشة الكاملة */
-        #game-container {
-            position: relative;
-            width: 100vw;
-            height: 100vh;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            background: radial-gradient(circle, #1e293b 0%, #0f172a 100%);
-        }
-
-        /* شاشة القائمة الرئيسية */
-        .menu-card {
-            background: rgba(30, 41, 59, 0.85);
-            backdrop-filter: blur(12px);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            padding: 35px 30px;
-            border-radius: 20px;
-            box-shadow: 0 20px 50px rgba(0,0,0,0.5);
-            text-align: center;
-            width: 90%;
-            max-width: 440px;
-            z-index: 10;
-        }
-
-        .menu-card h1 {
-            font-size: 2.2rem;
-            margin-bottom: 20px;
-            color: #38bdf8;
-            text-shadow: 0 0 15px rgba(56, 189, 248, 0.4);
-        }
-
-        /* صندوق الـ ID وتنسيق زر النسخ */
-        .id-box {
-            background: rgba(15, 23, 42, 0.7);
-            padding: 12px;
-            border-radius: 12px;
-            font-size: 0.95rem;
-            margin-bottom: 20px;
-            color: #94a3b8;
-            border: 1px solid rgba(255,255,255,0.08);
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 10px;
-        }
-
-        .id-text {
-            word-break: break-all;
-            color: #4ade80;
-            font-weight: bold;
-            font-family: monospace;
-            font-size: 1rem;
-        }
-
-        .btn-copy {
-            background: #334155;
-            color: #fff;
-            border: none;
-            padding: 6px 12px;
-            border-radius: 8px;
-            cursor: pointer;
-            font-size: 0.85rem;
-            transition: all 0.2s ease;
-            white-space: nowrap;
-        }
-
-        .btn-copy:hover {
-            background: #38bdf8;
-            color: #0f172a;
-        }
-
-        .input-group {
-            display: flex;
-            flex-direction: column;
-            gap: 12px;
-            margin-bottom: 20px;
-        }
-
-        input {
-            width: 100%;
-            padding: 14px;
-            border-radius: 10px;
-            border: 1px solid #334155;
-            background: #0f172a;
-            color: #fff;
-            font-size: 1rem;
-            text-align: center;
-            outline: none;
-            transition: 0.3s;
-        }
-
-        input:focus {
-            border-color: #38bdf8;
-            box-shadow: 0 0 10px rgba(56, 189, 248, 0.3);
-        }
-
-        .btn {
-            width: 100%;
-            padding: 14px;
-            border: none;
-            border-radius: 10px;
-            font-size: 1.1rem;
-            font-weight: bold;
-            cursor: pointer;
-            transition: all 0.2s ease;
-        }
-
-        .btn-primary {
-            background: linear-gradient(135deg, #38bdf8, #2563eb);
-            color: white;
-            box-shadow: 0 4px 15px rgba(37, 99, 235, 0.4);
-        }
-
-        .btn-primary:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(37, 99, 235, 0.6);
-        }
-
-        .btn-secondary {
-            background: #334155;
-            color: white;
-            margin-top: 10px;
-        }
-
-        .btn-secondary:hover {
-            background: #475569;
-        }
-
-        /* لوحة اللعبة (Canvas) */
-        #canvas {
-            display: none;
-            width: 100%;
-            height: 100%;
-            position: absolute;
-            top: 0;
-            left: 0;
-        }
-
-        /* شريط معلومات أثنا اللعب */
-        #hud {
-            display: none;
-            position: absolute;
-            top: 20px;
-            right: 20px;
-            background: rgba(15, 23, 42, 0.8);
-            padding: 10px 20px;
-            border-radius: 30px;
-            border: 1px solid rgba(255,255,255,0.1);
-            z-index: 5;
-            font-size: 0.9rem;
-        }
+        * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
+        body, html { width: 100%; height: 100%; overflow: hidden; font-family: 'Segoe UI', Tahoma, sans-serif; background: #0f172a; color: #fff; }
+        #game-container { position: relative; width: 100vw; height: 100vh; display: flex; justify-content: center; align-items: center; background: radial-gradient(circle, #1e293b 0%, #0f172a 100%); }
+        .menu-card { background: rgba(30, 41, 59, 0.85); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.1); padding: 35px 30px; border-radius: 20px; box-shadow: 0 20px 50px rgba(0,0,0,0.5); text-align: center; width: 90%; max-width: 440px; z-index: 10; }
+        .menu-card h1 { font-size: 2.2rem; margin-bottom: 20px; color: #38bdf8; text-shadow: 0 0 15px rgba(56, 189, 248, 0.4); }
+        .id-box { background: rgba(15, 23, 42, 0.7); padding: 12px; border-radius: 12px; font-size: 0.95rem; margin-bottom: 20px; color: #94a3b8; border: 1px solid rgba(255,255,255,0.08); display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+        .id-text { word-break: break-all; color: #4ade80; font-weight: bold; font-family: monospace; font-size: 0.95rem; }
+        .btn-copy { background: #334155; color: #fff; border: none; padding: 6px 12px; border-radius: 8px; cursor: pointer; font-size: 0.85rem; transition: all 0.2s ease; white-space: nowrap; }
+        .btn-copy:hover { background: #38bdf8; color: #0f172a; }
+        .input-group { display: flex; flex-direction: column; gap: 12px; margin-bottom: 20px; }
+        input { width: 100%; padding: 14px; border-radius: 10px; border: 1px solid #334155; background: #0f172a; color: #fff; font-size: 1rem; text-align: center; outline: none; transition: 0.3s; }
+        input:focus { border-color: #38bdf8; box-shadow: 0 0 10px rgba(56, 189, 248, 0.3); }
+        .btn { width: 100%; padding: 14px; border: none; border-radius: 10px; font-size: 1.1rem; font-weight: bold; cursor: pointer; transition: all 0.2s ease; }
+        .btn-primary { background: linear-gradient(135deg, #38bdf8, #2563eb); color: white; box-shadow: 0 4px 15px rgba(37, 99, 235, 0.4); }
+        .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(37, 99, 235, 0.6); }
+        .btn-secondary { background: #334155; color: white; margin-top: 10px; }
+        .btn-secondary:hover { background: #475569; }
+        #canvas { display: none; width: 100%; height: 100%; position: absolute; top: 0; left: 0; }
+        #hud { display: none; position: absolute; top: 20px; right: 20px; background: rgba(15, 23, 42, 0.8); padding: 10px 20px; border-radius: 30px; border: 1px solid rgba(255,255,255,0.1); z-index: 5; font-size: 0.9rem; }
     </style>
 </head>
 <body>
 
     <div id="game-container">
-        
-        <!-- شريط معلومات اللعب العلوي -->
         <div id="hud">
             حالة الاتصال: <span id="hud-status" style="color: #ef4444;">غير متصل</span>
         </div>
 
-        <!-- القائمة الرئيسية -->
         <div class="menu-card" id="main-menu">
             <h1>ألغاز 2D أونلاين</h1>
             
-            <!-- صندوق الـ ID مع زر النسخ -->
             <div class="id-box">
-                <div>الـ ID: <span class="id-text" id="my-id">جاري التحميل...</span></div>
+                <div>الـ ID: <span class="id-text" id="my-id">جاري الاتصال بالسيرفر...</span></div>
                 <button class="btn-copy" id="copy-btn" onclick="copyMyID()">نسخ 📋</button>
             </div>
 
@@ -203,7 +51,6 @@
             <button class="btn btn-secondary" onclick="startGame()">بدء التجربة 🎮</button>
         </div>
 
-        <!-- شاشة اللعب (Canvas) -->
         <canvas id="canvas"></canvas>
     </div>
 
@@ -219,7 +66,6 @@
         let peer = null;
         let conn = null;
 
-        // ضبط حجم الشاشة تلقائياً
         function resizeCanvas() {
             canvas.width = window.innerWidth;
             canvas.height = window.innerHeight;
@@ -227,29 +73,48 @@
         window.addEventListener('resize', resizeCanvas);
         resizeCanvas();
 
-        // 1. إعداد اتصال PeerJS لدعم الاتصال عبر مختلف الشبكات بـ STUN/TURN
-        peer = new Peer({
-            config: {
-                iceServers: [
-                    { urls: 'stun:stun.l.google.com:19302' },
-                    { urls: 'stun:stun1.l.google.com:19302' }
-                ]
-            }
-        });
+        // إنشاء الاتصال مع خيارات أمان وإتاحة أكثر
+        function initPeer() {
+            if (peer) peer.destroy();
+            
+            myIdDisplay.innerText = "جاري جلب الـ ID...";
+            myIdDisplay.style.color = "#38bdf8";
 
-        peer.on('open', (id) => {
-            myIdDisplay.innerText = id;
-        });
+            peer = new Peer({
+                debug: 1,
+                config: {
+                    iceServers: [
+                        { urls: 'stun:stun.l.google.com:19302' },
+                        { urls: 'stun:stun.services.mozilla.com' }
+                    ]
+                }
+            });
 
-        peer.on('connection', (connection) => {
-            conn = connection;
-            setupEvents();
-        });
+            peer.on('open', (id) => {
+                myIdDisplay.innerText = id;
+                myIdDisplay.style.color = "#4ade80";
+            });
 
-        // دالة نسخ الـ ID للحافظة
+            peer.on('connection', (connection) => {
+                conn = connection;
+                setupEvents();
+            });
+
+            peer.on('error', (err) => {
+                console.error(err);
+                myIdDisplay.innerText = "فشل الاتصال! اضغط لإعادة المحاولة";
+                myIdDisplay.style.color = "#ef4444";
+                myIdDisplay.style.cursor = "pointer";
+                myIdDisplay.onclick = initPeer;
+            });
+        }
+
+        // تشغيل الاتصال عند تحميل الصفحة
+        initPeer();
+
         function copyMyID() {
             const idText = myIdDisplay.innerText;
-            if (idText && idText !== "جاري التحميل...") {
+            if (idText && !idText.includes("جاري") && !idText.includes("فشل")) {
                 navigator.clipboard.writeText(idText).then(() => {
                     copyBtn.innerText = "تم النسخ! ✅";
                     copyBtn.style.background = "#22c55e";
@@ -257,15 +122,13 @@
                         copyBtn.innerText = "نسخ 📋";
                         copyBtn.style.background = "#334155";
                     }, 2000);
-                }).catch(err => {
-                    alert("تعذر النسخ تلقائياً، يمكنك نسخه يدوياً.");
                 });
             }
         }
 
         function connectToFriend() {
             const friendId = document.getElementById('peer-id-input').value.trim();
-            if (friendId) {
+            if (friendId && peer) {
                 conn = peer.connect(friendId);
                 setupEvents();
             }
@@ -275,24 +138,17 @@
             conn.on('open', () => {
                 hudStatus.innerText = "متصل 🟢";
                 hudStatus.style.color = "#4ade80";
-                alert("تم الاتصال باللاعب الآخر بنجاح!");
-            });
-
-            conn.on('data', (data) => {
-                // هنا سنستقبل بيانات حركة وقوانين اللعبة لاحقاً
+                alert("تم الاتصال بنجاح!");
             });
         }
 
-        // 2. بدء اللعبة والدخول للشاشة الكاملة
         function startGame() {
             mainMenu.style.display = 'none';
             hud.style.display = 'block';
             canvas.style.display = 'block';
-
             requestAnimationFrame(gameLoop);
         }
 
-        // 3. تحريك المربع بـ WASD
         let player = { x: canvas.width / 2, y: canvas.height / 2, size: 30, speed: 5 };
         let keys = {};
 
@@ -309,7 +165,6 @@
         function draw() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-            // رسم خلفية شبكية أنيقة
             ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
             ctx.lineWidth = 1;
             for (let x = 0; x < canvas.width; x += 40) {
@@ -319,7 +174,6 @@
                 ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
             }
 
-            // رسم اللاعب (مربع أزرق متوهج)
             ctx.fillStyle = '#38bdf8';
             ctx.shadowBlur = 15;
             ctx.shadowColor = '#38bdf8';
