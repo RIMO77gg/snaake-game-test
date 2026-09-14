@@ -2,158 +2,285 @@
 <html lang="ar" dir="rtl">
 <head>
     <meta charset="UTF-8">
-    <title>لعبة الدودة أونلاين (Multiplayer Snake)</title>
-    <!-- استدعاء مكتبة PeerJS للاتصال الأونلاين -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>لعبة الألغاز أونلاين</title>
+    <!-- استدعاء مكتبة PeerJS للربط -->
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
-        body {
-            background-color: #222;
-            color: #fff;
-            font-family: Arial, sans-serif;
-            text-align: center;
+        * {
+            box-sizing: border-box;
             margin: 0;
-            padding: 20px;
+            padding: 0;
+            user-select: none;
         }
-        canvas {
-            background-color: #000;
-            border: 3px solid #555;
-            display: block;
-            margin: 10px auto;
+        body, html {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #0f172a;
+            color: #fff;
         }
-        .controls {
-            margin-bottom: 10px;
+
+        /* حاوية اللعبة بالشاشة الكاملة */
+        #game-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: radial-gradient(circle, #1e293b 0%, #0f172a 100%);
         }
-        input, button {
-            padding: 8px 12px;
-            font-size: 16px;
-            margin: 5px;
+
+        /* شاشة القائمة الرئيسية */
+        .menu-card {
+            background: rgba(30, 41, 59, 0.85);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 40px;
+            border-radius: 20px;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+            text-align: center;
+            width: 90%;
+            max-width: 420px;
+            z-index: 10;
         }
-        #status {
-            color: #ffca28;
+
+        .menu-card h1 {
+            font-size: 2.2rem;
+            margin-bottom: 20px;
+            color: #38bdf8;
+            text-shadow: 0 0 15px rgba(56, 189, 248, 0.4);
+        }
+
+        .status-box {
+            background: rgba(15, 23, 42, 0.6);
+            padding: 10px;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            margin-bottom: 20px;
+            color: #94a3b8;
+            border: 1px solid rgba(255,255,255,0.05);
+        }
+
+        .status-box span {
+            color: #4ade80;
             font-weight: bold;
+        }
+
+        .input-group {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+
+        input {
+            width: 100%;
+            padding: 14px;
+            border-radius: 10px;
+            border: 1px solid #334155;
+            background: #0f172a;
+            color: #fff;
+            font-size: 1rem;
+            text-align: center;
+            outline: none;
+            transition: 0.3s;
+        }
+
+        input:focus {
+            border-color: #38bdf8;
+            box-shadow: 0 0 10px rgba(56, 189, 248, 0.3);
+        }
+
+        .btn {
+            width: 100%;
+            padding: 14px;
+            border: none;
+            border-radius: 10px;
+            font-size: 1.1rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #38bdf8, #2563eb);
+            color: white;
+            box-shadow: 0 4px 15px rgba(37, 99, 235, 0.4);
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(37, 99, 235, 0.6);
+        }
+
+        .btn-secondary {
+            background: #334155;
+            color: white;
+            margin-top: 10px;
+        }
+
+        .btn-secondary:hover {
+            background: #475569;
+        }
+
+        /* لوحة اللعبة (تظهر بعد البدء) */
+        #canvas {
+            display: none;
+            width: 100%;
+            height: 100%;
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+
+        /* شريط معلومات أعلى الشاشة أثناء اللعب */
+        #hud {
+            display: none;
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(15, 23, 42, 0.8);
+            padding: 10px 20px;
+            border-radius: 30px;
+            border: 1px solid rgba(255,255,255,0.1);
+            z-index: 5;
+            font-size: 0.9rem;
         }
     </style>
 </head>
 <body>
 
-    <h1>لعبة الدودة أونلاين 🐍</h1>
-    <div id="status">جاري الاتصال بالسيرفر...</div>
+    <div id="game-container">
+        
+        <!-- شريط الحساسات والمعلومات العلوي -->
+        <div id="hud">
+            حالة الاتصال: <span id="hud-status" style="color: #ef4444;">غير متصل</span>
+        </div>
 
-    <div class="controls">
-        <p>معرفك (ID الخاص بك): <b id="my-id">...</b></p>
-        <input type="text" id="peer-id-input" placeholder="أدخل ID اللاعب الآخر">
-        <button onclick="connectToPeer()">اتصال باللاعب</button>
+        <!-- القائمة الرئيسية -->
+        <div class="menu-card" id="main-menu">
+            <h1>ألغاز 2D أونلاين</h1>
+            
+            <div class="status-box">
+                الـ ID الخاص بك: <span id="my-id">جاري التحميل...</span>
+            </div>
+
+            <div class="input-group">
+                <input type="text" id="peer-id-input" placeholder="أدخل ID صديقك هنا">
+                <button class="btn btn-primary" onclick="connectToFriend()">اتصال باللاعب 🔗</button>
+            </div>
+
+            <button class="btn btn-secondary" onclick="startGame()">بدء التجربة 🎮</button>
+        </div>
+
+        <!-- شاشة اللعب (Canvas) -->
+        <canvas id="canvas"></canvas>
     </div>
 
-    <canvas id="gameCanvas" width="400" height="400"></canvas>
-
     <script>
-        const canvas = document.getElementById("gameCanvas");
-        const ctx = canvas.getContext("2d");
-
-        const gridSize = 20;
-        const tileCount = canvas.width / gridSize;
-
-        // إحداثيات الدودة الخاصة بي (اللاعب 1: أخضر)
-        let mySnake = [{x: 5, y: 5}];
-        let myDir = {x: 1, y: 0};
-
-        // إحداثيات الدودة المنافسة (اللاعب 2: أحمر)
-        let enemySnake = [{x: 15, y: 15}];
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const mainMenu = document.getElementById('main-menu');
+        const hud = document.getElementById('hud');
+        const hudStatus = document.getElementById('hud-status');
+        const myIdDisplay = document.getElementById('my-id');
 
         let peer = null;
         let conn = null;
 
-        // 1. إعداد PeerJS للاتصال
+        // ضبط حجم الشاشة تلقائياً
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        // 1. إعداد اتصال الشبكة PeerJS
         peer = new Peer();
 
         peer.on('open', (id) => {
-            document.getElementById('my-id').innerText = id;
-            document.getElementById('status').innerText = "جاهز للاتصال! شارك الـ ID مع صديقك.";
+            myIdDisplay.innerText = id;
         });
 
         peer.on('connection', (connection) => {
             conn = connection;
-            setupConnection();
+            setupEvents();
         });
 
-        function connectToPeer() {
-            const peerId = document.getElementById('peer-id-input').value;
-            if (peerId) {
-                conn = peer.connect(peerId);
-                setupConnection();
+        function connectToFriend() {
+            const friendId = document.getElementById('peer-id-input').value;
+            if (friendId) {
+                conn = peer.connect(friendId);
+                setupEvents();
             }
         }
 
-        function setupConnection() {
+        function setupEvents() {
             conn.on('open', () => {
-                document.getElementById('status').innerText = "تم الاتصال باللاعب الآخر! اللعبة بدأت.";
+                hudStatus.innerText = "متصل 🟢";
+                hudStatus.style.color = "#4ade80";
+                alert("تم الاتصال باللاعب الآخر بنجاح!");
             });
 
-            // استقبال إحداثيات اللاعب الآخر
             conn.on('data', (data) => {
-                if (data.type === 'update') {
-                    enemySnake = data.snake;
-                }
+                // هنا سنستقبل تحركات اللاعب الثاني لاحقاً
             });
         }
 
-        // 2. التحكّم في الحركة (الأسهم)
-        window.addEventListener("keydown", e => {
-            switch (e.key) {
-                case "ArrowUp":    if (myDir.y === 0) myDir = {x: 0, y: -1}; break;
-                case "ArrowDown":  if (myDir.y === 0) myDir = {x: 0, y: 1}; break;
-                case "ArrowLeft":  if (myDir.x === 0) myDir = {x: -1, y: 0}; break;
-                case "ArrowRight": if (myDir.x === 0) myDir = {x: 1, y: 0}; break;
-            }
-        });
+        // 2. بدء اللعبة والدخول للشاشة الكاملة
+        function startGame() {
+            mainMenu.style.display = 'none';
+            hud.style.display = 'block';
+            canvas.style.display = 'block';
 
-        // 3. تحديث اللعبة وإرسال البيانات
-        function gameLoop() {
-            // تحريك دودة اللاعب الحالي
-            let head = {x: mySnake[0].x + myDir.x, y: mySnake[0].y + myDir.y};
-            
-            // العبور من الحواف
-            if (head.x < 0) head.x = tileCount - 1;
-            if (head.x >= tileCount) head.x = 0;
-            if (head.y < 0) head.y = tileCount - 1;
-            if (head.y >= tileCount) head.y = 0;
+            // تشغيل الحلقة الرئيسية للرسم والتحرك
+            requestAnimationFrame(gameLoop);
+        }
 
-            mySnake.unshift(head);
-            mySnake.pop();
+        // 3. تحريك بسيط باختبار مفاتيح WASD
+        let player = { x: canvas.width / 2, y: canvas.height / 2, size: 30, speed: 5 };
+        let keys = {};
 
-            // إرسال الإحداثيات الجديدة للاعب الآخر إذا كان متصلاً
-            if (conn && conn.open) {
-                conn.send({
-                    type: 'update',
-                    snake: mySnake
-                });
-            }
+        window.addEventListener('keydown', e => keys[e.key.toLowerCase()] = true);
+        window.addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
 
-            // رسم اللعبة
-            draw();
+        function update() {
+            if (keys['w'] || keys['arrowup']) player.y -= player.speed;
+            if (keys['s'] || keys['arrowdown']) player.y += player.speed;
+            if (keys['a'] || keys['arrowleft']) player.x -= player.speed;
+            if (keys['d'] || keys['arrowright']) player.x += player.speed;
         }
 
         function draw() {
-            // تنظيف الشاشة
-            ctx.fillStyle = "black";
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-            // رسم دودة اللاعب الحالي (أخضر)
-            ctx.fillStyle = "lime";
-            mySnake.forEach(part => {
-                ctx.fillRect(part.x * gridSize, part.y * gridSize, gridSize - 2, gridSize - 2);
-            });
+            // رسم خلفية شبكية أنيقة
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+            ctx.lineWidth = 1;
+            for (let x = 0; x < canvas.width; x += 40) {
+                ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
+            }
+            for (let y = 0; y < canvas.height; y += 40) {
+                ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
+            }
 
-            // رسم دودة اللاعب الثاني (أحمر)
-            ctx.fillStyle = "red";
-            enemySnake.forEach(part => {
-                ctx.fillRect(part.x * gridSize, part.y * gridSize, gridSize - 2, gridSize - 2);
-            });
+            // رسم اللاعب (مربع أزرق متوهج)
+            ctx.fillStyle = '#38bdf8';
+            ctx.shadowBlur = 15;
+            ctx.shadowColor = '#38bdf8';
+            ctx.fillRect(player.x - player.size/2, player.y - player.size/2, player.size, player.size);
+            ctx.shadowBlur = 0; // إعادة التعيين
         }
 
-        // تشغيل اللعبة بسرعة 10 إطارات/ثانية
-        setInterval(gameLoop, 100);
+        function gameLoop() {
+            update();
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
     </script>
 </body>
 </html>
