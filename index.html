@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <title>لعبة الدودة أونلاين (Multiplayer Snake)</title>
+    <!-- استدعاء مكتبة PeerJS للاتصال الأونلاين -->
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <style>
+        body {
+            background-color: #222;
+            color: #fff;
+            font-family: Arial, sans-serif;
+            text-align: center;
+            margin: 0;
+            padding: 20px;
+        }
+        canvas {
+            background-color: #000;
+            border: 3px solid #555;
+            display: block;
+            margin: 10px auto;
+        }
+        .controls {
+            margin-bottom: 10px;
+        }
+        input, button {
+            padding: 8px 12px;
+            font-size: 16px;
+            margin: 5px;
+        }
+        #status {
+            color: #ffca28;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>لعبة الدودة أونلاين 🐍</h1>
+    <div id="status">جاري الاتصال بالسيرفر...</div>
+
+    <div class="controls">
+        <p>معرفك (ID الخاص بك): <b id="my-id">...</b></p>
+        <input type="text" id="peer-id-input" placeholder="أدخل ID اللاعب الآخر">
+        <button onclick="connectToPeer()">اتصال باللاعب</button>
+    </div>
+
+    <canvas id="gameCanvas" width="400" height="400"></canvas>
+
+    <script>
+        const canvas = document.getElementById("gameCanvas");
+        const ctx = canvas.getContext("2d");
+
+        const gridSize = 20;
+        const tileCount = canvas.width / gridSize;
+
+        // إحداثيات الدودة الخاصة بي (اللاعب 1: أخضر)
+        let mySnake = [{x: 5, y: 5}];
+        let myDir = {x: 1, y: 0};
+
+        // إحداثيات الدودة المنافسة (اللاعب 2: أحمر)
+        let enemySnake = [{x: 15, y: 15}];
+
+        let peer = null;
+        let conn = null;
+
+        // 1. إعداد PeerJS للاتصال
+        peer = new Peer();
+
+        peer.on('open', (id) => {
+            document.getElementById('my-id').innerText = id;
+            document.getElementById('status').innerText = "جاهز للاتصال! شارك الـ ID مع صديقك.";
+        });
+
+        peer.on('connection', (connection) => {
+            conn = connection;
+            setupConnection();
+        });
+
+        function connectToPeer() {
+            const peerId = document.getElementById('peer-id-input').value;
+            if (peerId) {
+                conn = peer.connect(peerId);
+                setupConnection();
+            }
+        }
+
+        function setupConnection() {
+            conn.on('open', () => {
+                document.getElementById('status').innerText = "تم الاتصال باللاعب الآخر! اللعبة بدأت.";
+            });
+
+            // استقبال إحداثيات اللاعب الآخر
+            conn.on('data', (data) => {
+                if (data.type === 'update') {
+                    enemySnake = data.snake;
+                }
+            });
+        }
+
+        // 2. التحكّم في الحركة (الأسهم)
+        window.addEventListener("keydown", e => {
+            switch (e.key) {
+                case "ArrowUp":    if (myDir.y === 0) myDir = {x: 0, y: -1}; break;
+                case "ArrowDown":  if (myDir.y === 0) myDir = {x: 0, y: 1}; break;
+                case "ArrowLeft":  if (myDir.x === 0) myDir = {x: -1, y: 0}; break;
+                case "ArrowRight": if (myDir.x === 0) myDir = {x: 1, y: 0}; break;
+            }
+        });
+
+        // 3. تحديث اللعبة وإرسال البيانات
+        function gameLoop() {
+            // تحريك دودة اللاعب الحالي
+            let head = {x: mySnake[0].x + myDir.x, y: mySnake[0].y + myDir.y};
+            
+            // العبور من الحواف
+            if (head.x < 0) head.x = tileCount - 1;
+            if (head.x >= tileCount) head.x = 0;
+            if (head.y < 0) head.y = tileCount - 1;
+            if (head.y >= tileCount) head.y = 0;
+
+            mySnake.unshift(head);
+            mySnake.pop();
+
+            // إرسال الإحداثيات الجديدة للاعب الآخر إذا كان متصلاً
+            if (conn && conn.open) {
+                conn.send({
+                    type: 'update',
+                    snake: mySnake
+                });
+            }
+
+            // رسم اللعبة
+            draw();
+        }
+
+        function draw() {
+            // تنظيف الشاشة
+            ctx.fillStyle = "black";
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // رسم دودة اللاعب الحالي (أخضر)
+            ctx.fillStyle = "lime";
+            mySnake.forEach(part => {
+                ctx.fillRect(part.x * gridSize, part.y * gridSize, gridSize - 2, gridSize - 2);
+            });
+
+            // رسم دودة اللاعب الثاني (أحمر)
+            ctx.fillStyle = "red";
+            enemySnake.forEach(part => {
+                ctx.fillRect(part.x * gridSize, part.y * gridSize, gridSize - 2, gridSize - 2);
+            });
+        }
+
+        // تشغيل اللعبة بسرعة 10 إطارات/ثانية
+        setInterval(gameLoop, 100);
+    </script>
+</body>
+</html>
