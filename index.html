@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>لعبة الألغاز أونلاين</title>
-    <!-- استدعاء مكتبة PeerJS للربط -->
+    <!-- استدعاء مكتبة PeerJS للربط المباشر بين الأجهزة عبر الإنترنت -->
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
         * {
@@ -38,12 +38,12 @@
             background: rgba(30, 41, 59, 0.85);
             backdrop-filter: blur(12px);
             border: 1px solid rgba(255, 255, 255, 0.1);
-            padding: 40px;
+            padding: 35px 30px;
             border-radius: 20px;
             box-shadow: 0 20px 50px rgba(0,0,0,0.5);
             text-align: center;
             width: 90%;
-            max-width: 420px;
+            max-width: 440px;
             z-index: 10;
         }
 
@@ -54,19 +54,44 @@
             text-shadow: 0 0 15px rgba(56, 189, 248, 0.4);
         }
 
-        .status-box {
-            background: rgba(15, 23, 42, 0.6);
-            padding: 10px;
-            border-radius: 8px;
-            font-size: 0.9rem;
+        /* صندوق الـ ID وتنسيق زر النسخ */
+        .id-box {
+            background: rgba(15, 23, 42, 0.7);
+            padding: 12px;
+            border-radius: 12px;
+            font-size: 0.95rem;
             margin-bottom: 20px;
             color: #94a3b8;
-            border: 1px solid rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.08);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
         }
 
-        .status-box span {
+        .id-text {
+            word-break: break-all;
             color: #4ade80;
             font-weight: bold;
+            font-family: monospace;
+            font-size: 1rem;
+        }
+
+        .btn-copy {
+            background: #334155;
+            color: #fff;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            transition: all 0.2s ease;
+            white-space: nowrap;
+        }
+
+        .btn-copy:hover {
+            background: #38bdf8;
+            color: #0f172a;
         }
 
         .input-group {
@@ -126,7 +151,7 @@
             background: #475569;
         }
 
-        /* لوحة اللعبة (تظهر بعد البدء) */
+        /* لوحة اللعبة (Canvas) */
         #canvas {
             display: none;
             width: 100%;
@@ -136,7 +161,7 @@
             left: 0;
         }
 
-        /* شريط معلومات أعلى الشاشة أثناء اللعب */
+        /* شريط معلومات أثنا اللعب */
         #hud {
             display: none;
             position: absolute;
@@ -155,7 +180,7 @@
 
     <div id="game-container">
         
-        <!-- شريط الحساسات والمعلومات العلوي -->
+        <!-- شريط معلومات اللعب العلوي -->
         <div id="hud">
             حالة الاتصال: <span id="hud-status" style="color: #ef4444;">غير متصل</span>
         </div>
@@ -164,8 +189,10 @@
         <div class="menu-card" id="main-menu">
             <h1>ألغاز 2D أونلاين</h1>
             
-            <div class="status-box">
-                الـ ID الخاص بك: <span id="my-id">جاري التحميل...</span>
+            <!-- صندوق الـ ID مع زر النسخ -->
+            <div class="id-box">
+                <div>الـ ID: <span class="id-text" id="my-id">جاري التحميل...</span></div>
+                <button class="btn-copy" id="copy-btn" onclick="copyMyID()">نسخ 📋</button>
             </div>
 
             <div class="input-group">
@@ -187,6 +214,7 @@
         const hud = document.getElementById('hud');
         const hudStatus = document.getElementById('hud-status');
         const myIdDisplay = document.getElementById('my-id');
+        const copyBtn = document.getElementById('copy-btn');
 
         let peer = null;
         let conn = null;
@@ -199,8 +227,15 @@
         window.addEventListener('resize', resizeCanvas);
         resizeCanvas();
 
-        // 1. إعداد اتصال الشبكة PeerJS
-        peer = new Peer();
+        // 1. إعداد اتصال PeerJS لدعم الاتصال عبر مختلف الشبكات بـ STUN/TURN
+        peer = new Peer({
+            config: {
+                iceServers: [
+                    { urls: 'stun:stun.l.google.com:19302' },
+                    { urls: 'stun:stun1.l.google.com:19302' }
+                ]
+            }
+        });
 
         peer.on('open', (id) => {
             myIdDisplay.innerText = id;
@@ -211,8 +246,25 @@
             setupEvents();
         });
 
+        // دالة نسخ الـ ID للحافظة
+        function copyMyID() {
+            const idText = myIdDisplay.innerText;
+            if (idText && idText !== "جاري التحميل...") {
+                navigator.clipboard.writeText(idText).then(() => {
+                    copyBtn.innerText = "تم النسخ! ✅";
+                    copyBtn.style.background = "#22c55e";
+                    setTimeout(() => {
+                        copyBtn.innerText = "نسخ 📋";
+                        copyBtn.style.background = "#334155";
+                    }, 2000);
+                }).catch(err => {
+                    alert("تعذر النسخ تلقائياً، يمكنك نسخه يدوياً.");
+                });
+            }
+        }
+
         function connectToFriend() {
-            const friendId = document.getElementById('peer-id-input').value;
+            const friendId = document.getElementById('peer-id-input').value.trim();
             if (friendId) {
                 conn = peer.connect(friendId);
                 setupEvents();
@@ -227,7 +279,7 @@
             });
 
             conn.on('data', (data) => {
-                // هنا سنستقبل تحركات اللاعب الثاني لاحقاً
+                // هنا سنستقبل بيانات حركة وقوانين اللعبة لاحقاً
             });
         }
 
@@ -237,11 +289,10 @@
             hud.style.display = 'block';
             canvas.style.display = 'block';
 
-            // تشغيل الحلقة الرئيسية للرسم والتحرك
             requestAnimationFrame(gameLoop);
         }
 
-        // 3. تحريك بسيط باختبار مفاتيح WASD
+        // 3. تحريك المربع بـ WASD
         let player = { x: canvas.width / 2, y: canvas.height / 2, size: 30, speed: 5 };
         let keys = {};
 
@@ -273,7 +324,7 @@
             ctx.shadowBlur = 15;
             ctx.shadowColor = '#38bdf8';
             ctx.fillRect(player.x - player.size/2, player.y - player.size/2, player.size, player.size);
-            ctx.shadowBlur = 0; // إعادة التعيين
+            ctx.shadowBlur = 0;
         }
 
         function gameLoop() {
