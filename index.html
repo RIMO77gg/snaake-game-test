@@ -48,7 +48,7 @@
                 <button class="btn btn-primary" id="join-btn">انضمام للغرفة واللعب 🔗</button>
             </div>
 
-            <button class="btn btn-secondary" onclick="startAsHost()">اللعب في غرفتك (مضيف) 🎮</button>
+            <button class="btn btn-secondary" onclick="startGame()">اللعب في غرفتك (مضيف) 🎮</button>
         </div>
 
         <canvas id="canvas"></canvas>
@@ -76,9 +76,8 @@
 
         myIdDisplay.innerText = myRoomCode;
 
-        // أنت تشاهد نفسك أزرق دائمًا، واللاعب الآخر يظهر لك أحمر دائمًا
-        let myPlayer = { x: 200, y: 200, size: 30, speed: 6, color: '#38bdf8' };
-        let otherPlayer = { x: -100, y: -100, size: 30, color: '#ef4444', active: false };
+        let myPlayer = { x: 200, y: 200, size: 30, speed: 5, color: '#38bdf8' };
+        let otherPlayer = { x: -100, y: -100, targetX: -100, targetY: -100, size: 30, color: '#ef4444', active: false };
 
         function subscribeToChannel(channelName) {
             currentChannel = channelName.trim().toUpperCase();
@@ -88,11 +87,20 @@
 
             pubnub.addListener({
                 message: function(event) {
-                    // عند استقبال إحداثيات من أي لاعب آخر غيرك
-                    if (event.publisher !== myUserId && event.message.type === 'move') {
-                        otherPlayer.x = event.message.x;
-                        otherPlayer.y = event.message.y;
-                        otherPlayer.active = true;
+                    if (event.publisher !== myUserId) {
+                        if (event.message.type === 'move') {
+                            // سلاسة الحركة وتحديث الهدف
+                            otherPlayer.targetX = event.message.x;
+                            otherPlayer.targetY = event.message.y;
+                            if (!otherPlayer.active) {
+                                otherPlayer.x = event.message.x;
+                                otherPlayer.y = event.message.y;
+                            }
+                            otherPlayer.active = true;
+                        } else if (event.message.type === 'hello') {
+                            // عند دخول لاعب جديد، ارسل له موقعك فوراً ليتعرف عليك
+                            sendPosition();
+                        }
                     }
                 }
             });
@@ -111,10 +119,6 @@
             });
         }
 
-        function startAsHost() {
-            startGame();
-        }
-
         joinBtn.addEventListener('click', function() {
             const inputField = document.getElementById('peer-id-input');
             const targetRoom = inputField.value.trim();
@@ -124,7 +128,7 @@
                 subscribeToChannel(targetRoom);
                 startGame();
             } else {
-                alert("يرجى لصق كود الغرفة في الخانة أولاً!");
+                alert("يرجى لصق كود الغرفة أولاً!");
             }
         });
 
@@ -137,7 +141,17 @@
             myPlayer.x = Math.floor(Math.random() * (canvas.width - 200)) + 100;
             myPlayer.y = Math.floor(Math.random() * (canvas.height - 200)) + 100;
 
+            // إرسال إشارة ترحيب لطلب التزامن التلقائي من اللاعب الموجود
+            pubnub.publish({
+                channel: currentChannel,
+                message: { type: 'hello' }
+            });
+
             sendPosition();
+            
+            // إرسال الإحداثيات بشكل دوري منتظم لضمان سلاسة الاتصال بدون تقطيع
+            setInterval(sendPosition, 50);
+
             requestAnimationFrame(gameLoop);
         }
 
@@ -152,14 +166,16 @@
         window.addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
 
         function update() {
-            let moved = false;
-            if (keys['w'] || keys['arrowup']) { myPlayer.y -= myPlayer.speed; moved = true; }
-            if (keys['s'] || keys['arrowdown']) { myPlayer.y += myPlayer.speed; moved = true; }
-            if (keys['a'] || keys['arrowleft']) { myPlayer.x -= myPlayer.speed; moved = true; }
-            if (keys['d'] || keys['arrowright']) { myPlayer.x += myPlayer.speed; moved = true; }
+            // حركة لاعبك المحلي
+            if (keys['w'] || keys['arrowup']) { myPlayer.y -= myPlayer.speed; }
+            if (keys['s'] || keys['arrowdown']) { myPlayer.y += myPlayer.speed; }
+            if (keys['a'] || keys['arrowleft']) { myPlayer.x -= myPlayer.speed; }
+            if (keys['d'] || keys['arrowright']) { myPlayer.x += myPlayer.speed; }
 
-            if (moved) {
-                sendPosition();
+            // تنعيم حركة المنافس عبر الشبكة (Interpolation) لإنهاء التقطيع
+            if (otherPlayer.active) {
+                otherPlayer.x += (otherPlayer.targetX - otherPlayer.x) * 0.3;
+                otherPlayer.y += (otherPlayer.targetY - otherPlayer.y) * 0.3;
             }
         }
 
@@ -187,13 +203,13 @@
                 ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
             }
 
-            // رسم نفسك (أنت دائماً المربع الأزرق)
+            // رسم موقعك المحلّي (مربع أزرق)
             ctx.fillStyle = myPlayer.color;
             ctx.shadowBlur = 15;
             ctx.shadowColor = myPlayer.color;
             ctx.fillRect(myPlayer.x - myPlayer.size/2, myPlayer.y - myPlayer.size/2, myPlayer.size, myPlayer.size);
 
-            // رسم خصمك/صديقك (يظهر لك دائماً كمربع أحمر)
+            // رسم موقع المنافس أونلاين (مربع أحمر)
             if (otherPlayer.active) {
                 ctx.fillStyle = otherPlayer.color;
                 ctx.shadowBlur = 15;
