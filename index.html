@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>لعبة الألغاز أونلاين</title>
-    <!-- استدعاء مكتبة PubNub للربط المضمون والسريع -->
+    <title>لعبة الألغاز 2D أونلاين</title>
+    <!-- مكتبة PubNub للاتصال الفوري -->
     <script src="https://cdn.pubnub.com/sdk/javascript/pubnub.7.2.2.min.js"></script>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
@@ -32,23 +32,23 @@
 
     <div id="game-container">
         <div id="hud">
-            حالة الاتصال: <span id="hud-status" style="color: #ef4444;">غير متصل</span>
+            الغرفة الحالية: <span id="hud-status" style="color: #4ade80;">...</span>
         </div>
 
         <div class="menu-card" id="main-menu">
             <h1>ألغاز 2D أونلاين</h1>
             
             <div class="id-box">
-                <div>كود الغرفة: <span class="id-text" id="my-id">جاري إنشاء الغرفة...</span></div>
+                <div>كود الغرفة: <span class="id-text" id="my-id">...</span></div>
                 <button class="btn-copy" id="copy-btn" onclick="copyMyID()">نسخ 📋</button>
             </div>
 
             <div class="input-group">
                 <input type="text" id="peer-id-input" placeholder="أدخل كود غرفة صديقك">
-                <button class="btn btn-primary" onclick="joinRoom()">انضمام للغرفة 🔗</button>
+                <button class="btn btn-primary" onclick="joinRoom()">انضمام للغرفة واللعب 🔗</button>
             </div>
 
-            <button class="btn btn-secondary" onclick="startGame()">بدء التجربة 🎮</button>
+            <button class="btn btn-secondary" onclick="startGame()">اللعب في غرفتك (مضيف) 🎮</button>
         </div>
 
         <canvas id="canvas"></canvas>
@@ -63,39 +63,43 @@
         const myIdDisplay = document.getElementById('my-id');
         const copyBtn = document.getElementById('copy-btn');
 
-        // توليد كود غرفة عشوائي ومميز بـ 5 أرقام/حروف
+        // إنشاء هوية مميزة لكل لاعب
+        const myUserId = 'user_' + Math.floor(Math.random() * 100000);
         const myRoomCode = "ROOM-" + Math.floor(1000 + Math.random() * 9000);
         let currentChannel = myRoomCode;
 
-        // تهيئة الاتصال السريع بواسطة PubNub Demo Keys
+        // خوادم الاتصال
         const pubnub = new PubNub({
             publishKey: 'demo',
             subscribeKey: 'demo',
-            userId: 'user_' + Math.floor(Math.random() * 1000)
+            userId: myUserId
         });
 
-        // إظهار كود الغرفة فوراً للمستخدم وبدون أي تأخير!
         myIdDisplay.innerText = myRoomCode;
+
+        // إحداثيات اللاعبين
+        let myPlayer = { x: 200, y: 200, size: 30, speed: 6, color: '#38bdf8' }; // مربع أزرق (أنت)
+        let otherPlayer = { x: -100, y: -100, size: 30, color: '#ef4444', active: false }; // مربع أحمر (صديقك)
 
         function subscribeToChannel(channelName) {
             currentChannel = channelName;
+            hudStatus.innerText = currentChannel;
             
             pubnub.subscribe({ channels: [currentChannel] });
 
             pubnub.addListener({
-                status: function(statusEvent) {
-                    if (statusEvent.category === "PNConnectedCategory") {
-                        hudStatus.innerText = "متصل بالغرفة 🟢 (" + currentChannel + ")";
-                        hudStatus.style.color = "#4ade80";
-                    }
-                },
                 message: function(event) {
-                    // هنا سنستقبل تحركات اللاعب الثاني لاحقاً
+                    // إذا استلمت موقع لاعب آخر وليس موقعك أنت
+                    if (event.publisher !== myUserId && event.message.type === 'move') {
+                        otherPlayer.x = event.message.x;
+                        otherPlayer.y = event.message.y;
+                        otherPlayer.active = true;
+                    }
                 }
             });
         }
 
-        // الاشتراك في الغرفة الخاصة بي افتراضياً
+        // الاشتراك الافتراضي في الغرفة
         subscribeToChannel(myRoomCode);
 
         function copyMyID() {
@@ -109,19 +113,30 @@
             });
         }
 
+        // 1. الانضمام والدخول للعبة فوراً
         function joinRoom() {
             const targetRoom = document.getElementById('peer-id-input').value.trim();
             if (targetRoom) {
                 pubnub.unsubscribeAll();
                 subscribeToChannel(targetRoom);
-                alert("تم الانضمام للغرفة: " + targetRoom);
+                startGame(); // إدخال اللاعب للعبة مباشرة عند الضغط!
+            } else {
+                alert("يرجى إدخال كود الغرفة أولاً!");
             }
         }
 
+        // 2. بدء الجيم وإخفاء القائمة
         function startGame() {
             mainMenu.style.display = 'none';
             hud.style.display = 'block';
             canvas.style.display = 'block';
+            resizeCanvas();
+            
+            // تحديد موقع ابتدائي عشوائي حتى لا يتطابق اللاعبان بنفس المكان في البداية
+            myPlayer.x = Math.random() * (canvas.width - 100) + 50;
+            myPlayer.y = Math.random() * (canvas.height - 100) + 50;
+
+            sendPosition();
             requestAnimationFrame(gameLoop);
         }
 
@@ -130,24 +145,41 @@
             canvas.height = window.innerHeight;
         }
         window.addEventListener('resize', resizeCanvas);
-        resizeCanvas();
 
-        let player = { x: canvas.width / 2, y: canvas.height / 2, size: 30, speed: 5 };
+        // 3. حركة WASD وإرسال الإحداثيات للاعب الثاني عبر الشبكة
         let keys = {};
-
         window.addEventListener('keydown', e => keys[e.key.toLowerCase()] = true);
         window.addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
 
         function update() {
-            if (keys['w'] || keys['arrowup']) player.y -= player.speed;
-            if (keys['s'] || keys['arrowdown']) player.y += player.speed;
-            if (keys['a'] || keys['arrowleft']) player.x -= player.speed;
-            if (keys['d'] || keys['arrowright']) player.x += player.speed;
+            let moved = false;
+            if (keys['w'] || keys['arrowup']) { myPlayer.y -= myPlayer.speed; moved = true; }
+            if (keys['s'] || keys['arrowdown']) { myPlayer.y += myPlayer.speed; moved = true; }
+            if (keys['a'] || keys['arrowleft']) { myPlayer.x -= myPlayer.speed; moved = true; }
+            if (keys['d'] || keys['arrowright']) { myPlayer.x += myPlayer.speed; moved = true; }
+
+            // إرسال الإحداثيات فور تحركك
+            if (moved) {
+                sendPosition();
+            }
         }
 
+        function sendPosition() {
+            pubnub.publish({
+                channel: currentChannel,
+                message: {
+                    type: 'move',
+                    x: myPlayer.x,
+                    y: myPlayer.y
+                }
+            });
+        }
+
+        // 4. رسم اللاعبين معاً
         function draw() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
+            // شبكة الخلفية
             ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
             ctx.lineWidth = 1;
             for (let x = 0; x < canvas.width; x += 40) {
@@ -157,10 +189,20 @@
                 ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
             }
 
-            ctx.fillStyle = '#38bdf8';
+            // رسم مربعك أنت (اللاعب 1: أزرق متوهج)
+            ctx.fillStyle = myPlayer.color;
             ctx.shadowBlur = 15;
-            ctx.shadowColor = '#38bdf8';
-            ctx.fillRect(player.x - player.size/2, player.y - player.size/2, player.size, player.size);
+            ctx.shadowColor = myPlayer.color;
+            ctx.fillRect(myPlayer.x - myPlayer.size/2, myPlayer.y - myPlayer.size/2, myPlayer.size, myPlayer.size);
+
+            // رسم المربع الخاص بصديقك (اللاعب 2: أحمر متوهج)
+            if (otherPlayer.active) {
+                ctx.fillStyle = otherPlayer.color;
+                ctx.shadowBlur = 15;
+                ctx.shadowColor = otherPlayer.color;
+                ctx.fillRect(otherPlayer.x - otherPlayer.size/2, otherPlayer.y - otherPlayer.size/2, otherPlayer.size, otherPlayer.size);
+            }
+            
             ctx.shadowBlur = 0;
         }
 
