@@ -3,24 +3,23 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>منصة ألعاب أونلاين 2D - Mini Games</title>
-    <!-- مكتبة PeerJS للاتصال المباشر WebRTC -->
+    <title>منصة ألعاب Mini Games المباشرة</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
-        body, html { width: 100%; height: 100%; overflow: hidden; font-family: 'Segoe UI', Tahoma, sans-serif; background: #090d16; color: #fff; display: flex; justify-content: center; align-items: center; }
+        body, html { width: 100%; height: 100%; overflow: hidden; font-family: 'Segoe UI', Tahoma, sans-serif; background: #070a12; color: #fff; display: flex; justify-content: center; align-items: center; }
         
-        #game-container { position: relative; width: 100vw; height: 100vh; display: flex; justify-content: center; align-items: center; overflow: hidden; }
+        #game-container { position: relative; width: 100vw; height: 100vh; display: flex; justify-content: center; align-items: center; overflow: hidden; background: #000; }
         
         /* القائمة الرئيسية */
-        .menu-card { background: rgba(30, 41, 59, 0.95); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.1); padding: 30px; border-radius: 20px; box-shadow: 0 20px 50px rgba(0,0,0,0.6); text-align: center; width: 95%; max-width: 480px; z-index: 10; position: absolute; }
+        .menu-card { background: rgba(15, 23, 42, 0.95); backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.1); padding: 30px; border-radius: 20px; box-shadow: 0 20px 50px rgba(0,0,0,0.8); text-align: center; width: 95%; max-width: 480px; z-index: 10; position: absolute; }
         .menu-card h1 { font-size: 2.2rem; margin-bottom: 15px; color: #38bdf8; text-shadow: 0 0 15px rgba(56, 189, 248, 0.4); }
-        .id-box { background: rgba(15, 23, 42, 0.7); padding: 12px; border-radius: 12px; font-size: 0.95rem; margin-bottom: 15px; color: #94a3b8; border: 1px solid rgba(255,255,255,0.08); display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+        .id-box { background: rgba(30, 41, 59, 0.7); padding: 12px; border-radius: 12px; font-size: 0.95rem; margin-bottom: 15px; color: #94a3b8; border: 1px solid rgba(255,255,255,0.08); display: flex; align-items: center; justify-content: space-between; gap: 10px; }
         .id-text { color: #4ade80; font-weight: bold; font-family: monospace; font-size: 1.1rem; }
         .btn-copy { background: #334155; color: #fff; border: none; padding: 6px 12px; border-radius: 8px; cursor: pointer; font-size: 0.85rem; transition: 0.2s; }
         .btn-copy:hover { background: #38bdf8; color: #0f172a; }
         
-        /* اختيار الألوان */
+        /* شبكة اختيار اللون */
         .color-picker-title { font-size: 0.95rem; color: #cbd5e1; margin-bottom: 10px; text-align: right; font-weight: bold; }
         .color-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-bottom: 20px; }
         .color-btn { width: 100%; aspect-ratio: 1; border-radius: 50%; border: 3px solid transparent; cursor: pointer; transition: transform 0.2s; }
@@ -36,39 +35,43 @@
         .btn-secondary { background: #334155; color: white; margin-top: 8px; }
         .btn-secondary:hover { background: #475569; }
         
-        /* شاشة اللعبة الكانفاس بابعاد محددة مسبقا مع Scaled Auto */
-        #canvas { display: none; background: #0f172a; box-shadow: 0 0 30px rgba(0,0,0,0.8); }
+        /* الكانفاس برؤية ونسبة أبعاد ثابتة */
+        #canvas { display: none; background: #0f172a; box-shadow: 0 0 30px rgba(0,0,0,0.9); border: 2px solid rgba(255,255,255,0.1); position: absolute; }
         
-        /* HUD واجهة المعومات والحالة */
-        #hud { display: none; position: absolute; top: 15px; left: 50%; transform: translateX(-50%); background: rgba(15, 23, 42, 0.85); padding: 10px 25px; border-radius: 30px; border: 1px solid rgba(255,255,255,0.1); z-index: 5; font-size: 1rem; display: flex; gap: 20px; align-items: center; }
-        .mode-selector { display: flex; gap: 8px; }
-        .mode-btn { background: #1e293b; color: #94a3b8; border: 1px solid #334155; padding: 5px 12px; border-radius: 15px; cursor: pointer; font-size: 0.85rem; }
-        .mode-btn.active { background: #38bdf8; color: #0f172a; font-weight: bold; border-color: #38bdf8; }
+        /* HUD واجهة المعومات والحالة والأزرار */
+        #hud { display: none; position: absolute; top: 15px; width: 90%; max-width: 1200px; justify-content: space-between; align-items: center; z-index: 5; }
+        .hud-card { background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(8px); padding: 10px 20px; border-radius: 30px; border: 1px solid rgba(255,255,255,0.1); font-size: 0.95rem; display: flex; gap: 15px; align-items: center; }
+        .nav-btn { background: #1e293b; color: #fff; border: 1px solid #334155; padding: 8px 16px; border-radius: 20px; cursor: pointer; font-size: 0.85rem; font-weight: bold; transition: 0.2s; }
+        .nav-btn:hover { background: #ef4444; border-color: #ef4444; }
+        .nav-btn.lobby { background: #0284c7; border-color: #38bdf8; }
+        .nav-btn.lobby:hover { background: #0369a1; }
     </style>
 </head>
 <body>
 
     <div id="game-container">
         <div id="hud">
-            <div>اللاعبون: <span id="player-count" style="color: #4ade80;">1</span></div>
-            <div>الميني جيم: <span id="current-game-title" style="color: #38bdf8;">الرئيسي (Lobby)</span></div>
-            <div class="mode-selector">
-                <button class="mode-btn active" onclick="switchGameMode('lobby')">اللوبي</button>
-                <button class="mode-btn" onclick="switchGameMode('puzzle')">🧩 الألغاز</button>
-                <button class="mode-btn" onclick="switchGameMode('dodge')">🤾‍♂️ التفادي</button>
-                <button class="mode-btn" onclick="switchGameMode('horror')">👻 الرعب</button>
+            <div class="hud-card">
+                <div>اللاعبون بالداخل: <span id="player-count" style="color: #4ade80; font-weight: bold;">1</span></div>
+                <div>|</div>
+                <div>الحالة: <span id="current-game-title" style="color: #38bdf8; font-weight: bold;">اللوبي الرئيسي</span></div>
+            </div>
+            
+            <div style="display: flex; gap: 10px;">
+                <button class="nav-btn lobby" onclick="returnToLobby()">العودة للوبي 🏠</button>
+                <button class="nav-btn" onclick="returnToMainMenu()">القائمة الرئيسية 🚪</button>
             </div>
         </div>
 
         <div class="menu-card" id="main-menu">
-            <h1>Mini Games أونلاين 🎮</h1>
+            <h1>عالم Mini Games 🎮</h1>
             
             <div class="id-box">
                 <div>كود غرفتك: <span class="id-text" id="my-id">جاري الإنشاء...</span></div>
                 <button class="btn-copy" id="copy-btn" onclick="copyMyID()">نسخ 📋</button>
             </div>
 
-            <div class="color-picker-title">اختر لون لاعبك:</div>
+            <div class="color-picker-title">اختر لون مربعك:</div>
             <div class="color-grid" id="color-grid"></div>
 
             <div class="input-group">
@@ -93,7 +96,7 @@
         const copyBtn = document.getElementById('copy-btn');
         const joinBtn = document.getElementById('join-btn');
 
-        // أبعاد الشاشة الافتراضية الثابتة للجميع
+        // تثبيت العالم الافتراضي بنسبة 16:9 ثابتة للجميع
         const VIRTUAL_WIDTH = 1280;
         const VIRTUAL_HEIGHT = 720;
 
@@ -104,16 +107,20 @@
         
         let currentGameMode = 'lobby'; // (lobby, puzzle, dodge, horror)
 
-        let myPlayer = { 
-            id: null,
-            x: 640, 
-            y: 360, 
-            size: 30, 
-            speed: 6, 
-            color: colors[0]
-        };
+        let myPlayer = { id: null, x: 640, y: 550, size: 30, speed: 6, color: colors[0] };
 
-        // إعداد الألوان
+        // أداء بوابات اللوبي
+        const portals = [
+            { id: 'puzzle', title: '🧩 لغز الباب التعاوني', x: 320, y: 300, radius: 70, color: '#38bdf8' },
+            { id: 'dodge', title: '🤾‍♂️ تفادي الصخور', x: 640, y: 300, radius: 70, color: '#f97316' },
+            { id: 'horror', title: '👻 المتاهة المظلمة', x: 960, y: 300, radius: 70, color: '#a855f7' }
+        ];
+
+        let startTimer = null;
+        let countdown = 0;
+        let activePortalTarget = null;
+
+        // إعداد شبكة الألوان
         const colorGrid = document.getElementById('color-grid');
         colors.forEach((col, index) => {
             const btn = document.createElement('button');
@@ -132,19 +139,15 @@
         let connections = {};
         let otherPlayers = {};
 
-        // المتغيرات الخاصة بالميني جيمز
-        let puzzleButton = { x: 300, y: 360, radius: 40, pressed: false };
+        // محاكاة الميني جيمز
+        let puzzleButton = { x: 300, y: 360, radius: 40 };
         let puzzleDoor = { x: 900, y: 200, width: 30, height: 320, open: false };
-
         let fallingRocks = [];
         let horrorMonster = { x: 100, y: 100, size: 40, speed: 2.5 };
 
         function initPeer() {
             peer = new Peer('ROOM-' + roomCode);
-            peer.on('open', (id) => {
-                myPlayer.id = id;
-                myIdDisplay.innerText = roomCode;
-            });
+            peer.on('open', (id) => { myPlayer.id = id; myIdDisplay.innerText = roomCode; });
             peer.on('connection', (conn) => setupConnection(conn));
             peer.on('error', (err) => {
                 if (err.type === 'unavailable-id') {
@@ -172,7 +175,7 @@
                         otherPlayers[data.id].color = data.color;
                     }
                     if(data.mode && data.mode !== currentGameMode) {
-                        setLocalMode(data.mode);
+                        setGameMode(data.mode);
                     }
                     updatePlayerCount();
                 }
@@ -209,25 +212,28 @@
             } else { alert("يرجى إدخال كود الغرفة أولاً!"); }
         });
 
-        function switchGameMode(mode) {
-            setLocalMode(mode);
+        function returnToLobby() {
+            setGameMode('lobby');
             broadcastPosition();
         }
 
-        function setLocalMode(mode) {
+        function returnToMainMenu() {
+            hud.style.display = 'none';
+            canvas.style.display = 'none';
+            mainMenu.style.display = 'block';
+            for(let id in connections) connections[id].close();
+        }
+
+        function setGameMode(mode) {
             currentGameMode = mode;
-            document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
-            
             const titles = {
                 'lobby': 'اللوبي الرئيسي',
-                'puzzle': '🧩 ميني جيم الألغاز والزر التعاوني',
-                'dodge': '🤾‍♂️ ميني جيم تفادي الصخور',
-                'horror': '👻 ميني جيم المتاهة المظلمة (رعب)'
+                'puzzle': '🧩 لغز الباب التعاوني',
+                'dodge': '🤾‍♂️ تفادي الصخور',
+                'horror': '👻 المتاهة المظلمة'
             };
             currentGameTitle.innerText = titles[mode];
-            
-            // إعادة ضبط المواقع عند التبديل
-            myPlayer.x = 200; myPlayer.y = 360;
+            myPlayer.x = 640; myPlayer.y = 550;
             if(mode === 'dodge') fallingRocks = [];
         }
 
@@ -242,7 +248,7 @@
             requestAnimationFrame(gameLoop);
         }
 
-        // إبقاء الكانفاس بنفس الأبعاد الافتراضية مع الملاءمة والتكبير الذكي للتصغير والتكبير
+        // ضبط الرؤية ثابتة لكافة الشاشات (نسبة الأبعاد لا تتغير إطلاقاً)
         function resizeCanvas() {
             const scale = Math.min(window.innerWidth / VIRTUAL_WIDTH, window.innerHeight / VIRTUAL_HEIGHT);
             canvas.style.width = `${VIRTUAL_WIDTH * scale}px`;
@@ -255,7 +261,6 @@
         window.addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
 
         function updateGameLogic() {
-            // حركة اللاعب
             let dx = 0, dy = 0;
             if (keys['w'] || keys['arrowup']) dy -= myPlayer.speed;
             if (keys['s'] || keys['arrowdown']) dy += myPlayer.speed;
@@ -265,29 +270,64 @@
             let nextX = myPlayer.x + dx;
             let nextY = myPlayer.y + dy;
 
-            // تصادم الجدران الشاشة
             if (nextX > 20 && nextX < VIRTUAL_WIDTH - 20) myPlayer.x = nextX;
             if (nextY > 20 && nextY < VIRTUAL_HEIGHT - 20) myPlayer.y = nextY;
 
-            // تنعيم باقي اللاعبين
             for (let id in otherPlayers) {
                 let p = otherPlayers[id];
                 p.x += (p.targetX - p.x) * 0.4;
                 p.y += (p.targetY - p.y) * 0.4;
             }
 
-            // منطق الميني جيمز الخاص
-            if (currentGameMode === 'puzzle') {
-                // فحص الوقوف على الزر
+            // فحص دخول دوائر الألعاب في اللوبي
+            if (currentGameMode === 'lobby') {
+                let insidePortal = null;
+                
+                portals.forEach(portal => {
+                    let d = Math.hypot(myPlayer.x - portal.x, myPlayer.y - portal.y);
+                    if (d < portal.radius) {
+                        insidePortal = portal;
+                    }
+                });
+
+                if (insidePortal) {
+                    let allPlayersIn = true;
+                    for (let id in otherPlayers) {
+                        let op = otherPlayers[id];
+                        if (Math.hypot(op.x - insidePortal.x, op.y - insidePortal.y) >= insidePortal.radius) {
+                            allPlayersIn = false; break;
+                        }
+                    }
+
+                    if (allPlayersIn) {
+                        if (!startTimer) {
+                            countdown = 3;
+                            activePortalTarget = insidePortal.id;
+                            startTimer = setInterval(() => {
+                                countdown--;
+                                if (countdown <= 0) {
+                                    clearInterval(startTimer);
+                                    startTimer = null;
+                                    setGameMode(activePortalTarget);
+                                    broadcastPosition();
+                                }
+                            }, 1000);
+                        }
+                    } else {
+                        if (startTimer) { clearInterval(startTimer); startTimer = null; }
+                    }
+                } else {
+                    if (startTimer) { clearInterval(startTimer); startTimer = null; }
+                }
+            }
+            else if (currentGameMode === 'puzzle') {
                 let distToBtn = Math.hypot(myPlayer.x - puzzleButton.x, myPlayer.y - puzzleButton.y);
                 let otherOnBtn = false;
                 for(let id in otherPlayers) {
                     if(Math.hypot(otherPlayers[id].x - puzzleButton.x, otherPlayers[id].y - puzzleButton.y) < puzzleButton.radius) otherOnBtn = true;
                 }
-                
                 puzzleDoor.open = (distToBtn < puzzleButton.radius || otherOnBtn);
 
-                // تصادم مع الباب المغلق
                 if (!puzzleDoor.open) {
                     if (myPlayer.x + myPlayer.size/2 > puzzleDoor.x && myPlayer.x - myPlayer.size/2 < puzzleDoor.x + puzzleDoor.width &&
                         myPlayer.y + myPlayer.size/2 > puzzleDoor.y && myPlayer.y - myPlayer.size/2 < puzzleDoor.y + puzzleDoor.height) {
@@ -296,25 +336,20 @@
                 }
             } 
             else if (currentGameMode === 'dodge') {
-                // توليد صخور
-                if (Math.random() < 0.05) {
+                if (Math.random() < 0.06) {
                     fallingRocks.push({ x: Math.random() * VIRTUAL_WIDTH, y: -20, radius: Math.random() * 20 + 15, speed: Math.random() * 4 + 3 });
                 }
                 for (let i = fallingRocks.length - 1; i >= 0; i--) {
-                    let r = fallingRocks[i];
-                    r.y += r.speed;
-                    // فحص تصادم
+                    let r = fallingRocks[i]; r.y += r.speed;
                     if (Math.hypot(myPlayer.x - r.x, myPlayer.y - r.y) < r.radius + myPlayer.size/2) {
-                        myPlayer.x = 100; myPlayer.y = 360; // إرجاع عند الخسارة
+                        myPlayer.x = 640; myPlayer.y = 550;
                     }
                     if (r.y > VIRTUAL_HEIGHT + 30) fallingRocks.splice(i, 1);
                 }
             } 
             else if (currentGameMode === 'horror') {
-                // تتبع الوحش لأقرب لاعب
                 let target = myPlayer;
                 let minDist = Math.hypot(myPlayer.x - horrorMonster.x, myPlayer.y - horrorMonster.y);
-                
                 for(let id in otherPlayers) {
                     let d = Math.hypot(otherPlayers[id].x - horrorMonster.x, otherPlayers[id].y - horrorMonster.y);
                     if(d < minDist) { minDist = d; target = otherPlayers[id]; }
@@ -324,7 +359,6 @@
                 horrorMonster.x += Math.cos(angle) * horrorMonster.speed;
                 horrorMonster.y += Math.sin(angle) * horrorMonster.speed;
 
-                // إعادة الرسترت عند لمس الوحش
                 if(Math.hypot(myPlayer.x - horrorMonster.x, myPlayer.y - horrorMonster.y) < horrorMonster.size/2 + myPlayer.size/2) {
                     myPlayer.x = 1100; myPlayer.y = 650;
                 }
@@ -332,14 +366,7 @@
         }
 
         function broadcastPosition() {
-            const packet = {
-                type: 'update',
-                id: myPlayer.id,
-                x: myPlayer.x,
-                y: myPlayer.y,
-                color: myPlayer.color,
-                mode: currentGameMode
-            };
+            const packet = { type: 'update', id: myPlayer.id, x: myPlayer.x, y: myPlayer.y, color: myPlayer.color, mode: currentGameMode };
             for (let peerId in connections) {
                 if (connections[peerId].open) connections[peerId].send(packet);
             }
@@ -358,33 +385,51 @@
                 ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(VIRTUAL_WIDTH, y); ctx.stroke();
             }
 
-            // رسم الميني جيم المختار
-            if (currentGameMode === 'puzzle') {
-                // الزر
+            // رسم اللوبي ودوائر الألعاب
+            if (currentGameMode === 'lobby') {
+                portals.forEach(portal => {
+                    ctx.fillStyle = portal.color + '33';
+                    ctx.strokeStyle = portal.color;
+                    ctx.lineWidth = 3;
+                    ctx.beginPath(); ctx.arc(portal.x, portal.y, portal.radius, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+
+                    ctx.fillStyle = '#fff';
+                    ctx.font = 'bold 16px Tahoma';
+                    ctx.textAlign = 'center';
+                    ctx.fillText(portal.title, portal.x, portal.y - portal.radius - 15);
+                    ctx.font = '12px Tahoma';
+                    ctx.fillStyle = '#94a3b8';
+                    ctx.fillText('قف هنا مع جميع اللاعبين للبدء', portal.x, portal.y + 5);
+                });
+
+                if (startTimer) {
+                    ctx.fillStyle = '#4ade80';
+                    ctx.font = 'bold 30px Tahoma';
+                    ctx.textAlign = 'center';
+                    ctx.fillText(`ستبدأ اللعبة بعد: ${countdown}`, VIRTUAL_WIDTH / 2, 100);
+                }
+            }
+            else if (currentGameMode === 'puzzle') {
                 ctx.fillStyle = puzzleDoor.open ? '#22c55e' : '#ef4444';
                 ctx.beginPath(); ctx.arc(puzzleButton.x, puzzleButton.y, puzzleButton.radius, 0, Math.PI * 2); ctx.fill();
-                ctx.fillStyle = '#fff'; ctx.font = '16px Tahoma'; ctx.fillText('اضغط هنا لفتح الباب', puzzleButton.x - 65, puzzleButton.y - 50);
+                ctx.fillStyle = '#fff'; ctx.font = '16px Tahoma'; ctx.textAlign = 'center';
+                ctx.fillText('قف على الزر لفتح الباب', puzzleButton.x, puzzleButton.y - 50);
 
-                // الباب
                 ctx.fillStyle = puzzleDoor.open ? 'rgba(34, 197, 94, 0.2)' : '#eab308';
                 ctx.fillRect(puzzleDoor.x, puzzleDoor.y, puzzleDoor.width, puzzleDoor.height);
             }
             else if (currentGameMode === 'dodge') {
-                // رسم الصخور
                 ctx.fillStyle = '#f97316';
-                fallingRocks.forEach(r => {
-                    ctx.beginPath(); ctx.arc(r.x, r.y, r.radius, 0, Math.PI * 2); ctx.fill();
-                });
+                fallingRocks.forEach(r => { ctx.beginPath(); ctx.arc(r.x, r.y, r.radius, 0, Math.PI * 2); ctx.fill(); });
             }
             else if (currentGameMode === 'horror') {
-                // الوحش المخيف
                 ctx.fillStyle = '#ef4444';
                 ctx.shadowBlur = 20; ctx.shadowColor = '#ef4444';
                 ctx.fillRect(horrorMonster.x - horrorMonster.size/2, horrorMonster.y - horrorMonster.size/2, horrorMonster.size, horrorMonster.size);
                 ctx.shadowBlur = 0;
             }
 
-            // رسم باقي اللاعبين
+            // رسم اللاعبين الأخرين
             for (let id in otherPlayers) {
                 let p = otherPlayers[id];
                 ctx.fillStyle = p.color;
@@ -392,20 +437,18 @@
                 ctx.fillRect(p.x - p.size/2, p.y - p.size/2, p.size, p.size);
             }
 
-            // رسم لاعبك المحلي
+            // رسم مربع اللاعب الخاص بك
             ctx.fillStyle = myPlayer.color;
             ctx.shadowBlur = 15; ctx.shadowColor = myPlayer.color;
             ctx.fillRect(myPlayer.x - myPlayer.size/2, myPlayer.y - myPlayer.size/2, myPlayer.size, myPlayer.size);
             ctx.shadowBlur = 0;
 
-            // إضاءة كشاف ضوئي حول اللاعبين في ميني جيم الرعب (Lighting effect)
+            // إضاءة كشاف ضوئي ميني جيم الرعب
             if (currentGameMode === 'horror') {
                 ctx.save();
-                ctx.fillStyle = 'rgba(5, 5, 10, 0.94)';
+                ctx.fillStyle = 'rgba(5, 5, 10, 0.95)';
                 ctx.beginPath();
                 ctx.rect(0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
-                
-                // فتح دائرة كشاف حول اللاعب
                 ctx.arc(myPlayer.x, myPlayer.y, 140, 0, Math.PI * 2, true);
                 for(let id in otherPlayers) {
                     ctx.arc(otherPlayers[id].x, otherPlayers[id].y, 140, 0, Math.PI * 2, true);
