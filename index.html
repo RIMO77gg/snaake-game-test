@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>لعبة الألغاز أونلاين</title>
-    <!-- استدعاء مكتبة PeerJS -->
-    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <!-- استدعاء مكتبة PubNub للربط المضمون والسريع -->
+    <script src="https://cdn.pubnub.com/sdk/javascript/pubnub.7.2.2.min.js"></script>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
         body, html { width: 100%; height: 100%; overflow: hidden; font-family: 'Segoe UI', Tahoma, sans-serif; background: #0f172a; color: #fff; }
@@ -13,7 +13,7 @@
         .menu-card { background: rgba(30, 41, 59, 0.85); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.1); padding: 35px 30px; border-radius: 20px; box-shadow: 0 20px 50px rgba(0,0,0,0.5); text-align: center; width: 90%; max-width: 440px; z-index: 10; }
         .menu-card h1 { font-size: 2.2rem; margin-bottom: 20px; color: #38bdf8; text-shadow: 0 0 15px rgba(56, 189, 248, 0.4); }
         .id-box { background: rgba(15, 23, 42, 0.7); padding: 12px; border-radius: 12px; font-size: 0.95rem; margin-bottom: 20px; color: #94a3b8; border: 1px solid rgba(255,255,255,0.08); display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-        .id-text { word-break: break-all; color: #4ade80; font-weight: bold; font-family: monospace; font-size: 0.95rem; }
+        .id-text { word-break: break-all; color: #4ade80; font-weight: bold; font-family: monospace; font-size: 1rem; }
         .btn-copy { background: #334155; color: #fff; border: none; padding: 6px 12px; border-radius: 8px; cursor: pointer; font-size: 0.85rem; transition: all 0.2s ease; white-space: nowrap; }
         .btn-copy:hover { background: #38bdf8; color: #0f172a; }
         .input-group { display: flex; flex-direction: column; gap: 12px; margin-bottom: 20px; }
@@ -39,13 +39,13 @@
             <h1>ألغاز 2D أونلاين</h1>
             
             <div class="id-box">
-                <div>الـ ID: <span class="id-text" id="my-id">جاري الاتصال بالسيرفر...</span></div>
+                <div>كود الغرفة: <span class="id-text" id="my-id">جاري إنشاء الغرفة...</span></div>
                 <button class="btn-copy" id="copy-btn" onclick="copyMyID()">نسخ 📋</button>
             </div>
 
             <div class="input-group">
-                <input type="text" id="peer-id-input" placeholder="أدخل ID صديقك هنا">
-                <button class="btn btn-primary" onclick="connectToFriend()">اتصال باللاعب 🔗</button>
+                <input type="text" id="peer-id-input" placeholder="أدخل كود غرفة صديقك">
+                <button class="btn btn-primary" onclick="joinRoom()">انضمام للغرفة 🔗</button>
             </div>
 
             <button class="btn btn-secondary" onclick="startGame()">بدء التجربة 🎮</button>
@@ -63,83 +63,59 @@
         const myIdDisplay = document.getElementById('my-id');
         const copyBtn = document.getElementById('copy-btn');
 
-        let peer = null;
-        let conn = null;
+        // توليد كود غرفة عشوائي ومميز بـ 5 أرقام/حروف
+        const myRoomCode = "ROOM-" + Math.floor(1000 + Math.random() * 9000);
+        let currentChannel = myRoomCode;
 
-        function resizeCanvas() {
-            canvas.width = window.innerWidth;
-            canvas.height = window.innerHeight;
-        }
-        window.addEventListener('resize', resizeCanvas);
-        resizeCanvas();
+        // تهيئة الاتصال السريع بواسطة PubNub Demo Keys
+        const pubnub = new PubNub({
+            publishKey: 'demo',
+            subscribeKey: 'demo',
+            userId: 'user_' + Math.floor(Math.random() * 1000)
+        });
 
-        // إنشاء الاتصال مع خيارات أمان وإتاحة أكثر
-        function initPeer() {
-            if (peer) peer.destroy();
+        // إظهار كود الغرفة فوراً للمستخدم وبدون أي تأخير!
+        myIdDisplay.innerText = myRoomCode;
+
+        function subscribeToChannel(channelName) {
+            currentChannel = channelName;
             
-            myIdDisplay.innerText = "جاري جلب الـ ID...";
-            myIdDisplay.style.color = "#38bdf8";
+            pubnub.subscribe({ channels: [currentChannel] });
 
-            peer = new Peer({
-                debug: 1,
-                config: {
-                    iceServers: [
-                        { urls: 'stun:stun.l.google.com:19302' },
-                        { urls: 'stun:stun.services.mozilla.com' }
-                    ]
+            pubnub.addListener({
+                status: function(statusEvent) {
+                    if (statusEvent.category === "PNConnectedCategory") {
+                        hudStatus.innerText = "متصل بالغرفة 🟢 (" + currentChannel + ")";
+                        hudStatus.style.color = "#4ade80";
+                    }
+                },
+                message: function(event) {
+                    // هنا سنستقبل تحركات اللاعب الثاني لاحقاً
                 }
             });
-
-            peer.on('open', (id) => {
-                myIdDisplay.innerText = id;
-                myIdDisplay.style.color = "#4ade80";
-            });
-
-            peer.on('connection', (connection) => {
-                conn = connection;
-                setupEvents();
-            });
-
-            peer.on('error', (err) => {
-                console.error(err);
-                myIdDisplay.innerText = "فشل الاتصال! اضغط لإعادة المحاولة";
-                myIdDisplay.style.color = "#ef4444";
-                myIdDisplay.style.cursor = "pointer";
-                myIdDisplay.onclick = initPeer;
-            });
         }
 
-        // تشغيل الاتصال عند تحميل الصفحة
-        initPeer();
+        // الاشتراك في الغرفة الخاصة بي افتراضياً
+        subscribeToChannel(myRoomCode);
 
         function copyMyID() {
-            const idText = myIdDisplay.innerText;
-            if (idText && !idText.includes("جاري") && !idText.includes("فشل")) {
-                navigator.clipboard.writeText(idText).then(() => {
-                    copyBtn.innerText = "تم النسخ! ✅";
-                    copyBtn.style.background = "#22c55e";
-                    setTimeout(() => {
-                        copyBtn.innerText = "نسخ 📋";
-                        copyBtn.style.background = "#334155";
-                    }, 2000);
-                });
-            }
-        }
-
-        function connectToFriend() {
-            const friendId = document.getElementById('peer-id-input').value.trim();
-            if (friendId && peer) {
-                conn = peer.connect(friendId);
-                setupEvents();
-            }
-        }
-
-        function setupEvents() {
-            conn.on('open', () => {
-                hudStatus.innerText = "متصل 🟢";
-                hudStatus.style.color = "#4ade80";
-                alert("تم الاتصال بنجاح!");
+            navigator.clipboard.writeText(myRoomCode).then(() => {
+                copyBtn.innerText = "تم النسخ! ✅";
+                copyBtn.style.background = "#22c55e";
+                setTimeout(() => {
+                    copyBtn.innerText = "نسخ 📋";
+                    copyBtn.style.background = "#334155";
+                }, 2000);
             });
+        }
+
+        function joinRoom() {
+            const targetRoom = document.getElementById('peer-id-input').value.trim();
+            if (targetRoom) {
+                pubnub.unsubscribeAll();
+                subscribeToChannel(targetRoom);
+                alert("تم الانضمام للغرفة: " + targetRoom);
+            }
         }
 
         function startGame() {
@@ -148,6 +124,13 @@
             canvas.style.display = 'block';
             requestAnimationFrame(gameLoop);
         }
+
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
 
         let player = { x: canvas.width / 2, y: canvas.height / 2, size: 30, speed: 5 };
         let keys = {};
