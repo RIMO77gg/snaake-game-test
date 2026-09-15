@@ -82,7 +82,6 @@
     </div>
 
     <script>
-        // --- محرك الصوت الذكي ---
         const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         function playSound(freq, type = 'sine', duration = 0.15, vol = 0.1) {
             if (audioCtx.state === 'suspended') audioCtx.resume();
@@ -116,10 +115,9 @@
         const colors = ['#38bdf8', '#ef4444', '#22c55e', '#eab308', '#a855f7', '#ec4899', '#f97316', '#14b8a6', '#f43f5e', '#8b5cf6'];
         let currentGameMode = 'lobby'; 
         
-        let myPlayer = { id: 'LOCAL', x: 640, y: 550, vx: 0, vy: 0, size: 30, speed: 1.4, friction: 0.85, color: colors[0] };
+        let myPlayer = { id: 'LOCAL', x: 640, y: 550, vx: 0, vy: 0, size: 30, speed: 1.4, friction: 0.85, color: colors[0], isEliminated: false };
         let particles = [];
 
-        // المنصات الأساسية باللوبي
         const portals = [
             { id: 'simon_real', title: '🎯 سايمون يقول (Simon Says)', x: 180, y: 350, radius: 70, color: '#f97316' },
             { id: 'color_memory', title: '🧠 ذاكرة الألوان (Memory)', x: 410, y: 350, radius: 70, color: '#eab308' },
@@ -129,8 +127,14 @@
         ];
 
         let startTimer = null, countdown = 0, activePortalTarget = null;
+        let activeGameTimers = [];
 
-        // إعداد شبكة الألوان
+        function clearAllGameTimers() {
+            activeGameTimers.forEach(timer => clearInterval(timer));
+            activeGameTimers = [];
+            if(startTimer) { clearInterval(startTimer); startTimer = null; }
+        }
+
         const colorGrid = document.getElementById('color-grid');
         colors.forEach((col, index) => {
             const btn = document.createElement('button');
@@ -148,19 +152,14 @@
         const roomCode = Math.floor(1000 + Math.random() * 9000).toString();
         let peer = null, connections = {}, otherPlayers = {};
 
-        // --- 1. بيانات لعبة: سايمون يقول الأصلية ---
-        const simonPalette = [
-            { name: 'الأحمر', hex: '#ef4444' }, { name: 'الأزرق', hex: '#38bdf8' },
-            { name: 'الأخضر', hex: '#22c55e' }, { name: 'الأصفر', hex: '#eab308' },
-            { name: 'الوردي', hex: '#ec4899' }, { name: 'البنفسجي', hex: '#a855f7' },
-            { name: 'البرتقالي', hex: '#f97316' }, { name: 'الفيروزي', hex: '#14b8a6' }
-        ];
+        // --- سايمون يقول ---
         let simonGrid = [];
         let simonTargetColor = null;
         let simonTimer = 0;
-        let simonPhase = 'WAITING'; // WAITING, RUN, DROP
+        let simonPhase = 'WAITING'; 
+        let simonWinnerAnnouncement = null;
 
-        // --- 2. بيانات لعبة: ذاكرة الألوان ---
+        // --- ذاكرة الألوان ---
         const memoryBlocks = [
             { id: 0, color: '#ef4444', freq: 261, x: 440, y: 200, w: 180, h: 140 },
             { id: 1, color: '#38bdf8', freq: 329, x: 660, y: 200, w: 180, h: 140 },
@@ -169,18 +168,15 @@
         ];
         let memorySequence = [], memoryStep = 0, memoryActiveIndex = -1, memoryState = 'WAITING';
 
-        // --- 3. بيانات لعبة: كرة القدم المتقدمة ---
+        // --- كرة القدم ---
         let ball = { x: 640, y: 360, vx: 0, vy: 0, radius: 18, friction: 0.98, bounce: 0.7 };
         let soccerScore = { team1: 0, team2: 0 };
 
-        // --- 4. بيانات لعبة: المتاهة المظلمة (Horror) ---
+        // --- المتاهة ---
         let mazeWalls = [
-            { x: 200, y: 100, w: 20, h: 400 },
-            { x: 200, y: 500, w: 300, h: 20 },
-            { x: 400, y: 200, w: 400, h: 20 },
-            { x: 600, y: 350, w: 20, h: 250 },
-            { x: 750, y: 100, w: 20, h: 400 },
-            { x: 900, y: 300, w: 200, h: 20 }
+            { x: 200, y: 100, w: 20, h: 400 }, { x: 200, y: 500, w: 300, h: 20 },
+            { x: 400, y: 200, w: 400, h: 20 }, { x: 600, y: 350, w: 20, h: 250 },
+            { x: 750, y: 100, w: 20, h: 400 }, { x: 900, y: 300, w: 200, h: 20 }
         ];
         let monster = { x: 1100, y: 150, size: 36, speed: 2.2 };
 
@@ -195,16 +191,17 @@
             connections[conn.peer] = conn;
             conn.on('open', () => {
                 updatePlayerCount();
-                conn.send({ type: 'update', id: myPlayer.id, x: myPlayer.x, y: myPlayer.y, color: myPlayer.color, mode: currentGameMode, ball: ball });
+                conn.send({ type: 'update', id: myPlayer.id, x: myPlayer.x, y: myPlayer.y, color: myPlayer.color, mode: currentGameMode, ball: ball, isEliminated: myPlayer.isEliminated });
             });
             conn.on('data', (data) => {
                 if (data.type === 'update') {
                     if (!otherPlayers[data.id]) {
-                        otherPlayers[data.id] = { x: data.x, y: data.y, targetX: data.x, targetY: data.y, color: data.color, size: 30 };
+                        otherPlayers[data.id] = { x: data.x, y: data.y, targetX: data.x, targetY: data.y, color: data.color, size: 30, isEliminated: data.isEliminated || false };
                     } else {
                         otherPlayers[data.id].targetX = data.x;
                         otherPlayers[data.id].targetY = data.y;
                         otherPlayers[data.id].color = data.color;
+                        otherPlayers[data.id].isEliminated = data.isEliminated || false;
                     }
                     if(data.ball) { ball.x = data.ball.x; ball.y = data.ball.y; }
                     if(data.mode && data.mode !== currentGameMode) setGameMode(data.mode);
@@ -235,11 +232,15 @@
             }
         });
 
-        function returnToLobby() { setGameMode('lobby'); broadcastPosition(); }
-        function returnToMainMenu() { hud.style.display = 'none'; canvas.style.display = 'none'; mainMenu.style.display = 'block'; }
+        function returnToLobby() { clearAllGameTimers(); setGameMode('lobby'); broadcastPosition(); }
+        function returnToMainMenu() { clearAllGameTimers(); hud.style.display = 'none'; canvas.style.display = 'none'; mainMenu.style.display = 'block'; }
 
         function setGameMode(mode) {
+            clearAllGameTimers();
             currentGameMode = mode;
+            myPlayer.isEliminated = false;
+            simonWinnerAnnouncement = null;
+
             const titles = {
                 'lobby': 'اللوبي الرئيسي',
                 'simon_real': '🎯 سايمون يقول (Simon Says)',
@@ -285,12 +286,19 @@
             }
         }
 
-        // --- 1. منطق سايمون يقول الأصلية ---
+        // --- سايمون يقول الأصلي ---
         function initSimonReal() {
+            const colorsList = [
+                { name: 'الأحمر', hex: '#ef4444' }, { name: 'الأزرق', hex: '#38bdf8' },
+                { name: 'الأخضر', hex: '#22c55e' }, { name: 'الأصفر', hex: '#eab308' },
+                { name: 'الوردي', hex: '#ec4899' }, { name: 'البنفسجي', hex: '#a855f7' }
+            ];
+            
             simonGrid = [];
+            let availableColors = [...colorsList];
             for(let r=0; r<3; r++) {
                 for(let c=0; c<4; c++) {
-                    let col = simonPalette[Math.floor(Math.random() * simonPalette.length)];
+                    let col = availableColors[Math.floor(Math.random() * availableColors.length)];
                     simonGrid.push({ x: 220 + c*220, y: 160 + r*160, w: 200, h: 140, color: col });
                 }
             }
@@ -298,96 +306,128 @@
         }
 
         function startSimonRound() {
+            if(currentGameMode !== 'simon_real') return;
             simonPhase = 'RUN';
             simonTimer = 4;
-            simonTargetColor = simonPalette[Math.floor(Math.random() * simonPalette.length)];
+            
+            // اختيار لون حصري من الموجود على الأرضية
+            let presentColors = [...new Set(simonGrid.map(t => t.color))];
+            simonTargetColor = presentColors[Math.floor(Math.random() * presentColors.length)];
             
             let simonInterval = setInterval(() => {
+                if(currentGameMode !== 'simon_real') { clearInterval(simonInterval); return; }
                 simonTimer--;
                 playSound(500 + (4 - simonTimer)*80, 'sine', 0.1, 0.1);
+                
                 if(simonTimer <= 0) {
                     clearInterval(simonInterval);
                     simonPhase = 'DROP';
                     playSound(200, 'sawtooth', 0.3, 0.25);
                     
-                    setTimeout(() => {
-                        let standingOnSafeTile = false;
-                        simonGrid.forEach(tile => {
-                            if(tile.color.hex === simonTargetColor.hex) {
-                                if(myPlayer.x > tile.x && myPlayer.x < tile.x + tile.w && myPlayer.y > tile.y && myPlayer.y < tile.y + tile.h) {
-                                    standingOnSafeTile = true;
+                    let timeout = setTimeout(() => {
+                        if(currentGameMode !== 'simon_real') return;
+                        
+                        // التحقق من حالة الوقوف
+                        if (!myPlayer.isEliminated) {
+                            let standingOnSafeTile = false;
+                            simonGrid.forEach(tile => {
+                                if(tile.color.hex === simonTargetColor.hex) {
+                                    if(myPlayer.x > tile.x && myPlayer.x < tile.x + tile.w && myPlayer.y > tile.y && myPlayer.y < tile.y + tile.h) {
+                                        standingOnSafeTile = true;
+                                    }
                                 }
-                            }
-                        });
+                            });
 
-                        if(!standingOnSafeTile) {
-                            playSound(120, 'sawtooth', 0.4, 0.3);
-                            createParticles(myPlayer.x, myPlayer.y, '#ef4444', 25);
-                            myPlayer.x = 640; myPlayer.y = 550; // سقوط
-                        } else {
-                            playSound(880, 'sine', 0.2, 0.2);
-                            createParticles(myPlayer.x, myPlayer.y, '#22c55e', 15);
+                            if(!standingOnSafeTile) {
+                                myPlayer.isEliminated = true;
+                                playSound(120, 'sawtooth', 0.4, 0.3);
+                                createParticles(myPlayer.x, myPlayer.y, '#ef4444', 30);
+                                returnToLobby(); // العودة للوبي فوراً لمن يخسر
+                                return;
+                            }
                         }
-                        setTimeout(() => initSimonReal(), 1500);
+
+                        // فحص المتبقين
+                        let activePlayersCount = 0;
+                        if (!myPlayer.isEliminated) activePlayersCount++;
+                        for(let id in otherPlayers) {
+                            if(!otherPlayers[id].isEliminated) activePlayersCount++;
+                        }
+
+                        if(activePlayersCount <= 1 && (Object.keys(otherPlayers).length > 0 || activePlayersCount === 1)) {
+                            simonWinnerAnnouncement = "🏆 لقد فزت بالمركز الأول!";
+                            playSound(900, 'sine', 0.5, 0.4);
+                            setTimeout(() => returnToLobby(), 3000);
+                        } else {
+                            setTimeout(() => initSimonReal(), 1200);
+                        }
                     }, 1200);
+                    activeGameTimers.push(timeout);
                 }
             }, 1000);
+            activeGameTimers.push(simonInterval);
         }
 
-        // --- 2. منطق ذاكرة الألوان ---
+        // --- ذاكرة الألوان ---
         function initMemoryGame() {
             memorySequence = [Math.floor(Math.random()*4), Math.floor(Math.random()*4)];
             startMemorySequence();
         }
 
         function startMemorySequence() {
+            if(currentGameMode !== 'color_memory') return;
             memoryState = 'SHOWING';
             let index = 0;
             let interval = setInterval(() => {
+                if(currentGameMode !== 'color_memory') { clearInterval(interval); return; }
                 memoryActiveIndex = memorySequence[index];
                 playSound(memoryBlocks[memoryActiveIndex].freq, 'sine', 0.3, 0.2);
                 createParticles(memoryBlocks[memoryActiveIndex].x + 90, memoryBlocks[memoryActiveIndex].y + 70, memoryBlocks[memoryActiveIndex].color, 12);
                 
-                setTimeout(() => memoryActiveIndex = -1, 400);
+                let t = setTimeout(() => memoryActiveIndex = -1, 400);
+                activeGameTimers.push(t);
                 index++;
                 
                 if(index >= memorySequence.length) {
                     clearInterval(interval);
-                    setTimeout(() => { memoryState = 'PLAYING'; memoryStep = 0; }, 500);
+                    let t2 = setTimeout(() => { if(currentGameMode === 'color_memory') { memoryState = 'PLAYING'; memoryStep = 0; } }, 500);
+                    activeGameTimers.push(t2);
                 }
             }, 750);
+            activeGameTimers.push(interval);
         }
 
-        // --- تحديث الفيزياء والتحكم ---
+        // --- التحديث الفيزيائي ---
         function updateGameLogic() {
-            let oldX = myPlayer.x, oldY = myPlayer.y;
+            if(!myPlayer.isEliminated) {
+                let oldX = myPlayer.x, oldY = myPlayer.y;
 
-            if (keys['w'] || keys['arrowup']) myPlayer.vy -= myPlayer.speed;
-            if (keys['s'] || keys['arrowdown']) myPlayer.vy += myPlayer.speed;
-            if (keys['a'] || keys['arrowleft']) myPlayer.vx -= myPlayer.speed;
-            if (keys['d'] || keys['arrowright']) myPlayer.vx += myPlayer.speed;
+                if (keys['w'] || keys['arrowup']) myPlayer.vy -= myPlayer.speed;
+                if (keys['s'] || keys['arrowdown']) myPlayer.vy += myPlayer.speed;
+                if (keys['a'] || keys['arrowleft']) myPlayer.vx -= myPlayer.speed;
+                if (keys['d'] || keys['arrowright']) myPlayer.vx += myPlayer.speed;
 
-            myPlayer.vx *= myPlayer.friction;
-            myPlayer.vy *= myPlayer.friction;
+                myPlayer.vx *= myPlayer.friction;
+                myPlayer.vy *= myPlayer.friction;
 
-            myPlayer.x += myPlayer.vx;
-            myPlayer.y += myPlayer.vy;
+                myPlayer.x += myPlayer.vx;
+                myPlayer.y += myPlayer.vy;
 
-            // تصادم المتاهة في لعبة الرعب
-            if(currentGameMode === 'horror') {
-                mazeWalls.forEach(wall => {
-                    if (myPlayer.x + myPlayer.size/2 > wall.x && myPlayer.x - myPlayer.size/2 < wall.x + wall.w &&
-                        myPlayer.y + myPlayer.size/2 > wall.y && myPlayer.y - myPlayer.size/2 < wall.y + wall.h) {
-                        myPlayer.x = oldX; myPlayer.y = oldY;
-                    }
-                });
+                if(currentGameMode === 'horror') {
+                    mazeWalls.forEach(wall => {
+                        if (myPlayer.x + myPlayer.size/2 > wall.x && myPlayer.x - myPlayer.size/2 < wall.x + wall.w &&
+                            myPlayer.y + myPlayer.size/2 > wall.y && myPlayer.y - myPlayer.size/2 < wall.y + wall.h) {
+                            myPlayer.x = oldX; myPlayer.y = oldY;
+                        }
+                    });
+                }
+
+                const margin = 20;
+                if (myPlayer.x < margin) { myPlayer.x = margin; myPlayer.vx = 0; }
+                if (myPlayer.x > VIRTUAL_WIDTH - margin) { myPlayer.x = VIRTUAL_WIDTH - margin; myPlayer.vx = 0; }
+                if (myPlayer.y < margin) { myPlayer.y = margin; myPlayer.vy = 0; }
+                if (myPlayer.y > VIRTUAL_HEIGHT - margin) { myPlayer.y = VIRTUAL_HEIGHT - margin; myPlayer.vy = 0; }
             }
-
-            const margin = 20;
-            if (myPlayer.x < margin) { myPlayer.x = margin; myPlayer.vx = 0; }
-            if (myPlayer.x > VIRTUAL_WIDTH - margin) { myPlayer.x = VIRTUAL_WIDTH - margin; myPlayer.vx = 0; }
-            if (myPlayer.y < margin) { myPlayer.y = margin; myPlayer.vy = 0; }
-            if (myPlayer.y > VIRTUAL_HEIGHT - margin) { myPlayer.y = VIRTUAL_HEIGHT - margin; myPlayer.vy = 0; }
 
             for (let id in otherPlayers) {
                 let p = otherPlayers[id];
@@ -401,7 +441,6 @@
                 if(pt.life <= 0) particles.splice(i, 1);
             }
 
-            // 1. اللوبي
             if (currentGameMode === 'lobby') {
                 portals.forEach(portal => {
                     if (Math.hypot(myPlayer.x - portal.x, myPlayer.y - portal.y) < portal.radius) {
@@ -423,7 +462,6 @@
                     }
                 });
             }
-            // 2. ذاكرة الألوان
             else if (currentGameMode === 'color_memory' && memoryState === 'PLAYING') {
                 memoryBlocks.forEach(b => {
                     if(myPlayer.x > b.x && myPlayer.x < b.x + b.w && myPlayer.y > b.y && myPlayer.y < b.y + b.h) {
@@ -440,7 +478,6 @@
                     }
                 });
             }
-            // 3. كرة القدم المتقدمة
             else if (currentGameMode === 'soccer') {
                 let dist = Math.hypot(myPlayer.x - ball.x, myPlayer.y - ball.y);
                 if(dist < myPlayer.size/2 + ball.radius) {
@@ -457,7 +494,6 @@
                 if(ball.x < 60 || ball.x > VIRTUAL_WIDTH - 60) ball.vx *= -ball.bounce;
                 if(ball.y < 60 || ball.y > VIRTUAL_HEIGHT - 60) ball.vy *= -ball.bounce;
 
-                // أهداف المرمى
                 if(ball.x < 70 && ball.y > 270 && ball.y < 450) {
                     soccerScore.team2++; ball.x = 640; ball.y = 360; ball.vx = 0; ball.vy = 0;
                     playSound(900, 'sine', 0.4, 0.3); createParticles(640, 360, '#22c55e', 40);
@@ -467,7 +503,6 @@
                     playSound(900, 'sine', 0.4, 0.3); createParticles(640, 360, '#38bdf8', 40);
                 }
             }
-            // 4. الرعب والمتاهة
             else if (currentGameMode === 'horror') {
                 let angle = Math.atan2(myPlayer.y - monster.y, myPlayer.x - monster.x);
                 monster.x += Math.cos(angle) * monster.speed;
@@ -475,17 +510,17 @@
 
                 if(Math.hypot(myPlayer.x - monster.x, myPlayer.y - monster.y) < 30) {
                     playSound(100, 'sawtooth', 0.5, 0.4);
-                    myPlayer.x = 100; myPlayer.y = 650;
+                    returnToLobby();
                 }
             }
         }
 
         function broadcastPosition() {
-            const packet = { type: 'update', id: myPlayer.id, x: myPlayer.x, y: myPlayer.y, color: myPlayer.color, mode: currentGameMode, ball: ball };
+            const packet = { type: 'update', id: myPlayer.id, x: myPlayer.x, y: myPlayer.y, color: myPlayer.color, mode: currentGameMode, ball: ball, isEliminated: myPlayer.isEliminated };
             for (let peerId in connections) { if (connections[peerId].open) connections[peerId].send(packet); }
         }
 
-        // --- الرسم والرندر ---
+        // --- العرض والرسم ---
         function draw() {
             ctx.clearRect(0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
 
@@ -500,7 +535,6 @@
                 ctx.globalAlpha = 1.0;
             });
 
-            // 1. اللوبي
             if (currentGameMode === 'lobby') {
                 portals.forEach(portal => {
                     ctx.fillStyle = portal.color + '22'; ctx.strokeStyle = portal.color; ctx.lineWidth = 4;
@@ -515,7 +549,6 @@
                     ctx.fillText(`الانطلاق بعد: ${countdown}`, VIRTUAL_WIDTH / 2, 120);
                 }
             }
-            // 2. سايمون يقول الأصلي
             else if (currentGameMode === 'simon_real') {
                 simonGrid.forEach(tile => {
                     let isVisible = (simonPhase !== 'DROP') || (tile.color.hex === simonTargetColor.hex);
@@ -533,8 +566,12 @@
                     ctx.fillStyle = simonTargetColor.hex;
                     ctx.fillText(`الوقت المتبقي: ${simonTimer} ثوانٍ`, VIRTUAL_WIDTH/2, 100);
                 }
+
+                if(simonWinnerAnnouncement) {
+                    ctx.fillStyle = '#4ade80'; ctx.font = 'bold 42px Tahoma'; ctx.textAlign = 'center';
+                    ctx.fillText(simonWinnerAnnouncement, VIRTUAL_WIDTH/2, 360);
+                }
             }
-            // 3. ذاكرة الألوان
             else if (currentGameMode === 'color_memory') {
                 memoryBlocks.forEach(b => {
                     ctx.fillStyle = (memoryActiveIndex === b.id) ? '#ffffff' : b.color;
@@ -544,27 +581,22 @@
                 ctx.fillStyle = '#fff'; ctx.font = 'bold 22px Tahoma'; ctx.textAlign = 'center';
                 ctx.fillText(memoryState === 'SHOWING' ? 'احفظ التسلسل الصوتي والحركي!' : 'كرر التسلسل بالوقوف على الألوان!', VIRTUAL_WIDTH/2, 100);
             }
-            // 4. كرة القدم
             else if (currentGameMode === 'soccer') {
                 ctx.strokeStyle = '#22c55e'; ctx.lineWidth = 4;
                 ctx.strokeRect(60, 60, VIRTUAL_WIDTH - 120, VIRTUAL_HEIGHT - 120);
                 ctx.beginPath(); ctx.arc(VIRTUAL_WIDTH/2, VIRTUAL_HEIGHT/2, 100, 0, Math.PI*2); ctx.stroke();
 
-                // المرميين الشبكيين
                 ctx.fillStyle = 'rgba(56, 189, 248, 0.3)'; ctx.fillRect(20, 270, 40, 180);
                 ctx.fillStyle = 'rgba(34, 197, 94, 0.3)'; ctx.fillRect(VIRTUAL_WIDTH - 60, 270, 40, 180);
 
-                // الكرة
                 ctx.fillStyle = '#ffffff'; ctx.shadowBlur = 15; ctx.shadowColor = '#ffffff';
                 ctx.beginPath(); ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2); ctx.fill(); ctx.shadowBlur = 0;
 
-                // النتيجة
                 ctx.font = 'bold 36px Tahoma'; ctx.textAlign = 'center';
                 ctx.fillStyle = '#38bdf8'; ctx.fillText(soccerScore.team1, VIRTUAL_WIDTH/2 - 60, 110);
                 ctx.fillStyle = '#fff'; ctx.fillText(':', VIRTUAL_WIDTH/2, 110);
                 ctx.fillStyle = '#22c55e'; ctx.fillText(soccerScore.team2, VIRTUAL_WIDTH/2 + 60, 110);
             }
-            // 5. الرعب والمتاهة المظلمة
             else if (currentGameMode === 'horror') {
                 ctx.fillStyle = '#334155';
                 mazeWalls.forEach(wall => ctx.fillRect(wall.x, wall.y, wall.w, wall.h));
@@ -572,26 +604,27 @@
                 ctx.fillStyle = '#ef4444'; ctx.shadowBlur = 20; ctx.shadowColor = '#ef4444';
                 ctx.beginPath(); ctx.arc(monster.x, monster.y, monster.size/2, 0, Math.PI*2); ctx.fill(); ctx.shadowBlur = 0;
 
-                // الرؤية الديناميكية
                 ctx.save();
                 ctx.fillStyle = 'rgba(2, 6, 23, 0.97)';
                 ctx.beginPath(); ctx.rect(0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
-                ctx.arc(myPlayer.x, myPlayer.y, 170, 0, Math.PI * 2, true);
-                for(let id in otherPlayers) { ctx.arc(otherPlayers[id].x, otherPlayers[id].y, 170, 0, Math.PI * 2, true); }
+                if(!myPlayer.isEliminated) ctx.arc(myPlayer.x, myPlayer.y, 170, 0, Math.PI * 2, true);
+                for(let id in otherPlayers) { if(!otherPlayers[id].isEliminated) ctx.arc(otherPlayers[id].x, otherPlayers[id].y, 170, 0, Math.PI * 2, true); }
                 ctx.fill(); ctx.restore();
             }
 
-            // رسم باقي اللاعبين
             for (let id in otherPlayers) {
                 let p = otherPlayers[id];
-                ctx.fillStyle = p.color; ctx.shadowBlur = 12; ctx.shadowColor = p.color;
-                ctx.fillRect(p.x - p.size/2, p.y - p.size/2, p.size, p.size);
+                if(!p.isEliminated) {
+                    ctx.fillStyle = p.color; ctx.shadowBlur = 12; ctx.shadowColor = p.color;
+                    ctx.fillRect(p.x - p.size/2, p.y - p.size/2, p.size, p.size);
+                }
             }
 
-            // رسم اللاعب المحلي
-            ctx.fillStyle = myPlayer.color; ctx.shadowBlur = 18; ctx.shadowColor = myPlayer.color;
-            ctx.fillRect(myPlayer.x - myPlayer.size/2, myPlayer.y - myPlayer.size/2, myPlayer.size, myPlayer.size);
-            ctx.shadowBlur = 0;
+            if(!myPlayer.isEliminated) {
+                ctx.fillStyle = myPlayer.color; ctx.shadowBlur = 18; ctx.shadowColor = myPlayer.color;
+                ctx.fillRect(myPlayer.x - myPlayer.size/2, myPlayer.y - myPlayer.size/2, myPlayer.size, myPlayer.size);
+                ctx.shadowBlur = 0;
+            }
         }
 
         function gameLoop() {
