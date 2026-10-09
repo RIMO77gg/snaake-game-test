@@ -60,6 +60,43 @@
   .you{color:#77839a;font-size:10.5px;margin-left:2px}
   #btnLeave{pointer-events:auto;margin-top:9px;width:100%;padding:7px;font-size:11px;background:#3a2130;color:#ff9bb0}
   .money{font-size:26px;font-weight:800;color:#7cfc9a;text-shadow:0 2px 8px rgba(0,0,0,.6)}
+
+  /* ---- shop terminal overlay ---- */
+  #shopOv{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
+    background:rgba(5,8,12,.55);z-index:40;pointer-events:auto}
+  .shopbox{width:min(680px,92vw);max-height:80vh;display:flex;flex-direction:column;
+    background:#0d141d;border:1px solid #2b3a4a;border-radius:14px;overflow:hidden;
+    box-shadow:0 24px 70px rgba(0,0,0,.6)}
+  .shophead{display:flex;justify-content:space-between;align-items:center;
+    padding:12px 16px;background:linear-gradient(180deg,#16222e,#101922);
+    color:#8fd7ff;font-weight:800;letter-spacing:.5px;font-size:15px;
+    border-bottom:1px solid #22303f}
+  .shophead button{background:#2a1520;color:#ff9bb0;border:1px solid #4a2735;border-radius:8px;
+    width:30px;height:30px;cursor:pointer;font-weight:800}
+  .shoplist{overflow-y:auto;padding:10px 12px;display:flex;flex-direction:column;gap:8px;flex:1}
+  .srow{display:flex;align-items:center;gap:12px;background:#121b25;border:1px solid #22303f;
+    border-radius:10px;padding:10px 12px}
+  .srow.off{opacity:.45}
+  .sic{font-size:26px;width:36px;text-align:center}
+  .sinfo{flex:1}
+  .sn{color:#eaf2fa;font-weight:800;font-size:15px}
+  .sd{color:#8aa0b4;font-size:12px}
+  .sstock{color:#7cfc9a;font-size:12px;font-weight:700;white-space:nowrap}
+  .sadd{background:#173423;color:#7cfc9a;border:1px solid #2c5c3d;border-radius:8px;
+    padding:8px 12px;font-weight:800;cursor:pointer}
+  .sadd:hover{background:#1e4630}
+  .sadd:disabled{cursor:not-allowed;background:#1a1f26;color:#5d6b78;border-color:#2a333d}
+  .shopfoot{display:flex;justify-content:space-between;align-items:center;gap:10px;
+    padding:10px 14px;border-top:1px solid #22303f;background:#0f1720}
+  .shopcart{color:#9fb2c4;font-size:13px;flex:1;min-height:18px}
+  .cchip{display:inline-block;background:#1b2a38;border:1px solid #2e4457;border-radius:7px;
+    padding:3px 8px;margin:2px;font-size:12px;color:#cfe3f5;cursor:pointer}
+  .cchip b{color:#ff9bb0;margin-left:5px}
+  .shopbuyrow{display:flex;align-items:center;gap:12px}
+  .shopmoney{color:#7cfc9a;font-weight:800;font-size:20px}
+  .shopbuybtn{background:#7cfc9a;color:#06210f;border:0;border-radius:9px;padding:10px 22px;
+    font-weight:900;cursor:pointer;font-size:15px}
+  .shopbuybtn:disabled{background:#243040;color:#5d6b78;cursor:not-allowed}
   .sub2{font-size:11px;color:#8d99ad;letter-spacing:1px}
   #fps{font-size:10.5px;color:#5f6b80;margin-top:6px;letter-spacing:1px}
   #btnMute{pointer-events:auto;padding:5px 11px;font-size:13px;border-radius:8px;background:#2b3446;margin-top:7px}
@@ -167,6 +204,21 @@
     <div class="jobhead">JOBS TO DO</div>
     <div id="jobList"></div>
   </div>
+
+  <div id="shopOv" style="display:none">
+    <div class="shopbox">
+      <div class="shophead"><span>&#128421; TURBO PARTS &mdash; SHOP TERMINAL</span><button id="shopX">&#10005;</button></div>
+      <div id="shopList" class="shoplist"></div>
+      <div class="shopfoot">
+        <div id="shopCart" class="shopcart">cart is empty</div>
+        <div class="shopbuyrow">
+          <span class="shopmoney">$<span id="shopMoney">0</span></span>
+          <button id="shopBuy" class="shopbuybtn" disabled>BUY</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div id="lockHint">Click to look around</div>
 </div>
 
@@ -299,8 +351,34 @@ var CAR_COLORS=['#e74c3c','#3498db','#f1c40f','#ecf0f1','#2ecc71','#9b59b6','#e6
 var CAR_COLOR_NAMES={'#e74c3c':'red','#3498db':'blue','#f1c40f':'yellow','#ecf0f1':'white',
  '#2ecc71':'green','#9b59b6':'purple','#e67e22':'orange','#00bcd4':'cyan','#795548':'brown','#607d8b':'grey'};
 var PEER_PREFIX='turbofix-garage-v3-';
-var CFG={fixRate:0.62,partPay:120,carPay:80,
+var CFG={fixRate:0.62,partPay:120,carPay:170,
   walk:5.2,run:8.2,bounds:{x0:-16,x1:16,z0:-12,z1:22}};
+
+/* shop state — declared up here because buildWorld() places the terminal,
+   the clock and (later) the neon sign that depend on it */
+var COLLIDERS=[];                 /* solid prop AABBs — filled by buildWorld */
+var SHOP_SPOT={x:8,z:-11.5};   /* in front of the shop computer */
+var stock={},ups={fix:0,spd:0,car:0,neon:0};
+var clockHour=null,clockMin=null,clockNext=0,neonMeshes=[];
+
+/* real inventory: how many of each tool / spare exist and are NOT in hands.
+   The wall holds one of each tool, bins hold a few spares — take them with E,
+   buy more at the shop computer when they run out. */
+var inv={t1:1,t2:1,t3:1,Engine:2,Tire:2,Bumper:2,Door:2,Paint:2};
+var stockMeshes={};
+function resetInv(){
+  inv={t1:1,t2:1,t3:1,Engine:2,Tire:2,Bumper:2,Door:2,Paint:2};
+  updateStockVisuals();
+}
+function updateStockVisuals(){
+  [1,2,3].forEach(function(k){
+    var m=stockMeshes['t'+k];if(m)m.visible=(inv['t'+k]>0);
+  });
+  BINS.forEach(function(b){
+    var m=stockMeshes[b.n];if(m)m.visible=(inv[b.n]>0);
+    var e=stockMeshes['E'+b.n];if(e)e.visible=(inv[b.n]<=0);
+  });
+}
 
 /* tools: 0 = empty hands, 1 wrench, 2 screwdriver, 3 hammer */
 var TOOLS={
@@ -308,35 +386,51 @@ var TOOLS={
   2:{name:'SCREWDRIVER',icon:'\u{1FA9B}'},
   3:{name:'HAMMER',icon:'\u{1F528}'}}
 ;
-var PART_TOOL={'Engine':2,'Tire':1,'Bumper':3};
-var PART_ICON={'Engine':'\u{1F527}','Tire':'\u{1F6DE}','Bumper':'\u{1F6E1}\u{FE0F}'};
-var PARTS_RACK=['Engine','Tire','Bumper'];
+var PART_TOOL={'Engine':2,'Tire':1,'Bumper':3,'Door':2};
+var PART_ICON={'Engine':'\u{1F527}','Tire':'\u{1F6DE}','Bumper':'\u{1F6E1}\u{FE0F}',
+  'Door':'\u{1F6AA}','Paint':'\u{1F3A8}'};
+var PARTS_RACK=['Engine','Tire','Bumper','Door'];
+var CARRY_PARTS=['Engine','Tire','Bumper','Door','Paint'];
+function carryScale(n,base){
+  if(n==='Bumper')return 0.83*base;
+  if(n==='Door')return 0.7*base;
+  if(n==='Paint')return 1.15*base;
+  return base;
+}
 
 var PART_DEFS=[
   {name:'Engine', off:[0,1.24,1.28],     size:[1.35,0.3,1.15], type:'box'},
   {name:'Tire',   off:[-1.06,0.45,-1.45],size:[0.9,0.9,0.32],  type:'wheel'},
-  {name:'Bumper', off:[0,0.62,2.26],     size:[1.9,0.4,0.35],  type:'box'}
+  {name:'Bumper', off:[0,0.62,2.26],     size:[1.9,0.4,0.35],  type:'box'},
+  {name:'Door',   off:[-1.0,0.92,-0.35], size:[0.14,0.62,1.45],type:'box'},
+  {name:'Paint',  off:[0.55,1.28,-1.85], size:[0.32,0.34,0.28],type:'box'}
 ];
 var PART_BY_NAME={};PART_DEFS.forEach(function(d){PART_BY_NAME[d.name]=d;});
 
 /* interaction spots */
-var BINS=[{n:'Engine',x:-6.6,z:-12.05},{n:'Tire',x:-4.4,z:-12.05},{n:'Bumper',x:-2.2,z:-12.05}];
+var BINS=[{n:'Engine',x:-6.6,z:-12.05},{n:'Tire',x:-4.4,z:-12.05},
+  {n:'Bumper',x:-2.2,z:-12.05},{n:'Door',x:0.0,z:-12.05},{n:'Paint',x:2.2,z:-12.05}];
 var TOOL_SPOTS=[null,
   {k:1,x:-16.6,z:-4.6},
   {k:2,x:-16.6,z:-2.9},
   {k:3,x:-16.6,z:-1.2}
 ];
 
-/* two-phase jobs: first remove the broken part (needs tool), then install the spare */
+/* two-phase jobs: first remove the broken part (needs tool), then install the spare.
+   Paint jobs skip the remove phase — hold the can and spray until the color is on. */
 function phaseOf(part){
   if(part.p>=1)return 'done';
+  if(part.n==='Paint')return 'paint';
   return part.p<0.5?'remove':'install';
+}
+function mixHex(a,b,t){
+  var c=new THREE.Color(a);c.lerp(new THREE.Color(b),t);return c.getHex();
 }
 
 /* ---------------- renderer / scenes ---------------- */
 var canvas=$('c');
 var renderer=new THREE.WebGLRenderer({canvas:canvas,antialias:true,powerPreference:'high-performance'});
-renderer.setPixelRatio(Math.min(window.devicePixelRatio,1.5));
+renderer.setPixelRatio(Math.min(window.devicePixelRatio,1.35));
 renderer.setSize(window.innerWidth,window.innerHeight);
 renderer.shadowMap.enabled=true;
 renderer.shadowMap.type=THREE.PCFSoftShadowMap;
@@ -345,7 +439,7 @@ renderer.autoClear=false;
 
 var scene=new THREE.Scene();
 scene.background=new THREE.Color(0x8fc0ee);
-scene.fog=new THREE.Fog(0x8fc0ee,70,165);
+scene.fog=new THREE.Fog(0xd8ecf8,95,270);
 
 var camera=new THREE.PerspectiveCamera(75,window.innerWidth/window.innerHeight,0.06,320);
 camera.rotation.order='YXZ';
@@ -363,29 +457,39 @@ window.addEventListener('resize',function(){
   renderer.setSize(window.innerWidth,window.innerHeight);
 });
 
-scene.add(new THREE.HemisphereLight(0xdff0ff,0x6f675a,0.55));
-scene.add(new THREE.AmbientLight(0xffffff,0.18));
+scene.add(new THREE.HemisphereLight(0xcfe9ff,0x9c8a68,0.72));
+scene.add(new THREE.AmbientLight(0xffffff,0.10));
 /* warm workshop lights so the shaded interior stays readable */
 [[0,-6],[0,1],[-9,-6],[9,1]].forEach(function(p){
   var pl=new THREE.PointLight(0xfff3d6,0.62,18,1.0);
   pl.position.set(p[0],3.85,p[1]);
   scene.add(pl);
 });
-var sun=new THREE.DirectionalLight(0xfff2d8,0.9);
+var sun=new THREE.DirectionalLight(0xfff0cf,1.12);
 sun.position.set(34,52,26);
 sun.castShadow=true;
-sun.shadow.mapSize.set(1024,1024);
-sun.shadow.camera.left=-45;sun.shadow.camera.right=45;
-sun.shadow.camera.top=45;sun.shadow.camera.bottom=-45;
+sun.shadow.mapSize.set(2048,2048);                 /* crisp shadows */
+sun.shadow.camera.left=-32;sun.shadow.camera.right=32;   /* tight box = sharp texels */
+sun.shadow.camera.top=32;sun.shadow.camera.bottom=-32;
 sun.shadow.camera.near=1;sun.shadow.camera.far=140;
-sun.shadow.bias=-0.0008;
+sun.shadow.bias=-0.00035;
+sun.shadow.normalBias=0.035;                       /* no shadow acne on round parts */
 scene.add(sun);
+/* the world is mostly static — refresh shadow maps ~12x per second instead of
+   every frame; this is the single biggest performance win in the garage */
+renderer.shadowMap.autoUpdate=false;
+var shadowNext=0;
+var skyMesh=null;
 
 /* ---------------- mesh helpers ---------------- */
 function lam(c,extra){
   var o={color:c};
   if(extra)for(var k in extra)o[k]=extra[k];
   return new THREE.MeshLambertMaterial(o);
+}
+/* faceted "cartoon" material (r128 Lambert has no flatShading — use Phong) */
+function flat(c){
+  return new THREE.MeshPhongMaterial({color:c,flatShading:true,shininess:0,specular:0x000000});
 }
 function mkBox(w,h,d,c,x,y,z,noShadow){
   var m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),(c&&c.isMaterial)?c:lam(c));
@@ -403,6 +507,120 @@ function canvasTex(w,h,draw){
   var cv=document.createElement('canvas');cv.width=w;cv.height=h;
   draw(cv.getContext('2d'),w,h);
   var t=new THREE.CanvasTexture(cv);t.needsUpdate=true;return t;
+}
+/* ---------------- procedural material textures ---------------- */
+var TEX={};
+function paintTex(size,draw,repX,repY){
+  var t=canvasTex(size,size,draw);
+  t.wrapS=t.wrapT=THREE.RepeatWrapping;
+  t.repeat.set(repX||1,repY||1);
+  try{t.anisotropy=Math.min(4,renderer.capabilities.getMaxAnisotropy());}catch(e){}
+  return t;
+}
+function speckle(g,w,h,n,alpha){
+  for(var i=0;i<n;i++){
+    var c=(Math.random()<0.5)?'255,255,255':'0,0,0';
+    g.fillStyle='rgba('+c+','+(Math.random()*(alpha||0.06))+')';
+    var s=1+Math.random()*2;
+    g.fillRect(Math.random()*w,Math.random()*h,s,s);
+  }
+}
+function makeTextures(){
+  /* sealed concrete workshop floor: speckles, stains, oil, hairline cracks */
+  TEX.floor=paintTex(512,function(g,w,h){
+    g.fillStyle='#969ca4';g.fillRect(0,0,w,h);
+    speckle(g,w,h,7000,0.06);
+    for(var s=0;s<8;s++){
+      var x=Math.random()*w,y=Math.random()*h,r=45+Math.random()*95;
+      var gr=g.createRadialGradient(x,y,0,x,y,r);
+      gr.addColorStop(0,'rgba(52,56,62,0.14)');gr.addColorStop(1,'rgba(52,56,62,0)');
+      g.fillStyle=gr;g.beginPath();g.arc(x,y,r,0,6.3);g.fill();
+    }
+    for(var o=0;o<5;o++){
+      var ox=Math.random()*w,oy=Math.random()*h,orr=9+Math.random()*20;
+      var og=g.createRadialGradient(ox,oy,0,ox,oy,orr);
+      og.addColorStop(0,'rgba(22,18,16,0.45)');og.addColorStop(1,'rgba(22,18,16,0)');
+      g.fillStyle=og;g.beginPath();g.arc(ox,oy,orr,0,6.3);g.fill();
+    }
+    g.strokeStyle='rgba(58,62,68,0.5)';g.lineWidth=1.4;
+    for(var c=0;c<6;c++){
+      var x=Math.random()*w,y=Math.random()*h;
+      g.beginPath();g.moveTo(x,y);
+      for(var k=0;k<9;k++){x+=(Math.random()-0.5)*70;y+=(Math.random()-0.5)*70;g.lineTo(x,y);}
+      g.stroke();
+    }
+    g.strokeStyle='rgba(46,50,56,0.55)';g.lineWidth=3;
+    g.beginPath();g.moveTo(0,h/2);g.lineTo(w,h/2);g.moveTo(w/2,0);g.lineTo(w/2,h);g.stroke();
+  },4,3);
+
+  /* painted wall panels — grime builds up near the floor */
+  TEX.wallLight=paintTex(256,function(g,w,h){
+    g.fillStyle='#c7ced6';g.fillRect(0,0,w,h);
+    speckle(g,w,h,2400,0.05);
+    var gr=g.createLinearGradient(0,h*0.5,0,h);
+    gr.addColorStop(0,'rgba(74,80,88,0)');gr.addColorStop(1,'rgba(74,80,88,0.34)');
+    g.fillStyle=gr;g.fillRect(0,0,w,h);
+  },1,1);
+  TEX.wallDark=paintTex(256,function(g,w,h){
+    g.fillStyle='#37474f';g.fillRect(0,0,w,h);
+    speckle(g,w,h,2400,0.07);
+    g.strokeStyle='rgba(0,0,0,0.16)';g.lineWidth=2;
+    for(var y=32;y<h;y+=48){g.beginPath();g.moveTo(0,y);g.lineTo(w,y);g.stroke();}
+  },1,1);
+
+  /* grass with clumps + dry patches */
+  TEX.grass=paintTex(256,function(g,w,h){
+    g.fillStyle='#66b23a';g.fillRect(0,0,w,h);
+    for(var i=0;i<6500;i++){
+      g.fillStyle=(Math.random()<0.5)?'rgba(58,116,38,0.5)':'rgba(152,200,88,0.45)';
+      g.fillRect(Math.random()*w,Math.random()*h,2,3+Math.random()*3);
+    }
+    for(var p=0;p<7;p++){
+      var x=Math.random()*w,y=Math.random()*h,r=30+Math.random()*60;
+      var gr=g.createRadialGradient(x,y,0,x,y,r);
+      gr.addColorStop(0,'rgba(150,158,90,0.3)');gr.addColorStop(1,'rgba(150,158,90,0)');
+      g.fillStyle=gr;g.beginPath();g.arc(x,y,r,0,6.3);g.fill();
+    }
+  },56,56);
+
+  /* asphalt driveway */
+  TEX.asphalt=paintTex(256,function(g,w,h){
+    g.fillStyle='#4a4e55';g.fillRect(0,0,w,h);
+    speckle(g,w,h,5200,0.10);
+    g.strokeStyle='rgba(30,32,36,0.6)';g.lineWidth=1.6;
+    for(var c=0;c<5;c++){
+      var x=Math.random()*w,y=Math.random()*h;
+      g.beginPath();g.moveTo(x,y);
+      for(var k=0;k<7;k++){x+=(Math.random()-0.5)*80;y+=(Math.random()-0.5)*80;g.lineTo(x,y);}
+      g.stroke();
+    }
+    for(var s=0;s<5;s++){
+      var sx=Math.random()*w,sy=Math.random()*h,r=30+Math.random()*50;
+      var gr=g.createRadialGradient(sx,sy,0,sx,sy,r);
+      gr.addColorStop(0,'rgba(255,255,255,0.05)');gr.addColorStop(1,'rgba(255,255,255,0)');
+      g.fillStyle=gr;g.beginPath();g.arc(sx,sy,r,0,6.3);g.fill();
+    }
+  },3,12);
+
+  /* pale wood grain for crates (tinted per crate) */
+  TEX.wood=paintTex(256,function(g,w,h){
+    g.fillStyle='#e6d7bd';g.fillRect(0,0,w,h);
+    for(var i=0;i<130;i++){
+      g.strokeStyle='rgba(150,120,80,'+(0.06+Math.random()*0.14)+')';
+      g.lineWidth=0.6+Math.random()*1.6;
+      var y=Math.random()*h;
+      g.beginPath();g.moveTo(0,y);
+      for(var x=0;x<=w;x+=32)g.lineTo(x,y+(Math.random()-0.5)*5);
+      g.stroke();
+    }
+    g.strokeStyle='rgba(96,72,44,0.55)';g.lineWidth=3;
+    g.beginPath();g.moveTo(0,h*0.34);g.lineTo(w,h*0.34);
+    g.moveTo(0,h*0.68);g.lineTo(w,h*0.68);g.stroke();
+    [[70,60],[185,170]].forEach(function(k){
+      g.fillStyle='rgba(120,92,54,0.5)';
+      g.beginPath();g.ellipse(k[0],k[1],7,4,0.4,0,6.3);g.fill();
+    });
+  },1,1);
 }
 function roundRect(g,x,y,w,h,r){
   g.beginPath();
@@ -472,18 +690,23 @@ var WALL_H=4.2;
 
 function twoToneWall(w,d,x,z,len,axis){
   /* axis 'x' = wall runs along x (back/front), 'z' = side wall */
-  function add(ww,hh,dd,cx,cy,cz,col){
-    scene.add(mkBox(axis==='x'?ww:dd,hh,axis==='x'?dd:ww,col,cx,cy,cz));
+  function wallMat(base,baseTex){
+    if(!baseTex)return lam(base);
+    var t=baseTex.clone();
+    t.wrapS=t.wrapT=THREE.RepeatWrapping;
+    t.repeat.set(Math.max(1,Math.round(len/3.6)),1);
+    t.needsUpdate=true;
+    return lam(0xffffff,{map:t});
   }
   var c1=0x37474f, c2=0xff8b32, c3=0xc7ced6;
   if(axis==='x'){
-    scene.add(mkBox(len,1.3,d,c1,x,0.65,z));
+    scene.add(mkBox(len,1.3,d,wallMat(c1,TEX.wallDark),x,0.65,z));
     scene.add(mkBox(len,0.2,d+0.04,c2,x,1.4,z));
-    scene.add(mkBox(len,WALL_H-1.5,d,c3,x,1.5+(WALL_H-1.5)/2,z));
+    scene.add(mkBox(len,WALL_H-1.5,d,wallMat(c3,TEX.wallLight),x,1.5+(WALL_H-1.5)/2,z));
   }else{
-    scene.add(mkBox(d,1.3,len,c1,x,0.65,z));
+    scene.add(mkBox(d,1.3,len,wallMat(c1,TEX.wallDark),x,0.65,z));
     scene.add(mkBox(d+0.04,0.2,len,c2,x,1.4,z));
-    scene.add(mkBox(d,WALL_H-1.5,len,c3,x,1.5+(WALL_H-1.5)/2,z));
+    scene.add(mkBox(d,WALL_H-1.5,len,wallMat(c3,TEX.wallLight),x,1.5+(WALL_H-1.5)/2,z));
   }
 }
 function glowPanel(w,h,x,y,z,col){
@@ -492,15 +715,193 @@ function glowPanel(w,h,x,y,z,col){
   m.position.set(x,y,z);m.rotation.y=Math.PI/2;scene.add(m);
 }
 
+/* ---------------- wall mirror: real planar reflection ----------------
+   Renders the scene once more from the camera reflected across the mirror
+   plane (with oblique near-plane clipping so the wall behind never shows). */
+var mirrorRT=null,mirrorCam=null,mirrorMesh=null,mirrorNext=0;
+var MSTAT={renders:0,culled:0,throttle:0,err:''};
+var _mN=new THREE.Vector3(),_mV=new THREE.Vector3(),_mD=new THREE.Vector3();
+var _mPlane=new THREE.Plane(),_mClip=new THREE.Vector4(),_mQ=new THREE.Vector4();
+var _mFrm=new THREE.Frustum(),_mPM=new THREE.Matrix4();
+
+function buildMirror(x,y,z,w,h){
+  mirrorRT=new THREE.WebGLRenderTarget(384,384,
+    {minFilter:THREE.LinearFilter,magFilter:THREE.LinearFilter});
+  mirrorCam=new THREE.PerspectiveCamera(62,1,0.12,150);
+  var mat=new THREE.ShaderMaterial({
+    uniforms:{tDiffuse:{value:mirrorRT.texture},textureMatrix:{value:new THREE.Matrix4()}},
+    vertexShader:
+      'uniform mat4 textureMatrix;\n'+
+      'varying vec4 vUvp;\n'+
+      'void main(){\n'+
+      '  vUvp=textureMatrix*vec4(position,1.0);\n'+
+      '  gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);\n'+
+      '}',
+    fragmentShader:
+      'uniform sampler2D tDiffuse;\n'+
+      'varying vec4 vUvp;\n'+
+      'void main(){\n'+
+      '  vec4 c=texture2DProj(tDiffuse,vUvp);\n'+
+      '  gl_FragColor=vec4(c.rgb,1.0);\n'+
+      '}'
+  });
+  mirrorMesh=new THREE.Mesh(new THREE.PlaneGeometry(w,h),mat);
+  mirrorMesh.position.set(x,y,z);
+  mirrorMesh.rotation.y=-Math.PI/2;          /* faces into the room */
+  scene.add(mirrorMesh);
+  /* frame behind + little shelf ledge under it */
+  scene.add(mkBox(0.10,h+0.26,w+0.26,0x232932,x+0.055,y,z));
+  scene.add(mkBox(0.30,0.07,w+0.44,0x3a4150,x-0.10,y-h/2-0.075,z));
+}
+
+function updateMirror(){
+  if(!mirrorMesh||!mirrorCam)return;
+  var now=performance.now();
+  if(now<mirrorNext){MSTAT.throttle++;return;}
+  mirrorNext=now+55;                                  /* refresh ~18 fps */
+  camera.updateMatrixWorld();
+  _mPM.multiplyMatrices(camera.projectionMatrix,camera.matrixWorldInverse);
+  _mFrm.setFromProjectionMatrix(_mPM);
+  if(!_mFrm.intersectsObject(mirrorMesh)){MSTAT.culled++;return;}      /* not on screen */
+  mirrorMesh.updateMatrixWorld();
+  /* mirror plane normal (plane's local +z, world space) */
+  _mN.set(0,0,1).transformDirection(mirrorMesh.matrixWorld);
+  var n=_mN,P=mirrorMesh.position;
+  /* reflect camera position across the plane */
+  var d0=n.dot(camera.position)-n.dot(P);
+  _mV.copy(camera.position).addScaledVector(n,-2*d0);
+  mirrorCam.position.copy(_mV);
+  /* reflect look direction and up */
+  camera.getWorldDirection(_mD);
+  var k2=n.dot(_mD)*2;
+  _mD.addScaledVector(n,-k2);
+  mirrorCam.up.set(0,1,0);
+  var ku=n.dot(mirrorCam.up)*2;
+  mirrorCam.up.addScaledVector(n,-ku);
+  mirrorCam.lookAt(_mV.clone().add(_mD));
+  mirrorCam.fov=camera.fov;mirrorCam.aspect=1;
+  mirrorCam.updateProjectionMatrix();
+  mirrorCam.updateMatrixWorld(true);
+  mirrorCam.projectionMatrix.copy(camera.projectionMatrix);
+  /* world -> texture uv matrix */
+  var tm=new THREE.Matrix4().set(0.5,0,0,0.5, 0,0.5,0,0.5, 0,0,0.5,0.5, 0,0,0,1);
+  tm.multiply(mirrorCam.projectionMatrix);
+  tm.multiply(mirrorCam.matrixWorldInverse);
+  mirrorMesh.material.uniforms.textureMatrix.value.copy(tm);
+  /* oblique near-plane clip: cut everything behind the glass */
+  _mPlane.setFromNormalAndCoplanarPoint(n,P);
+  _mPlane.applyMatrix4(mirrorCam.matrixWorldInverse);
+  _mClip.set(_mPlane.normal.x,_mPlane.normal.y,_mPlane.normal.z,_mPlane.constant);
+  var pm=mirrorCam.projectionMatrix;
+  _mQ.x=(Math.sign(_mClip.x)+pm.elements[8])/pm.elements[0];
+  _mQ.y=(Math.sign(_mClip.y)+pm.elements[9])/pm.elements[5];
+  _mQ.z=-1;
+  _mQ.w=(1+pm.elements[10])/pm.elements[14];
+  _mClip.multiplyScalar(2/_mClip.dot(_mQ));
+  pm.elements[2]=_mClip.x;
+  pm.elements[6]=_mClip.y;
+  pm.elements[10]=_mClip.z+1-0.005;
+  pm.elements[14]=_mClip.w;
+  /* the local player is normally hidden — show it only for this pass */
+  var lp=players.get(localId);
+  if(lp&&lp.mesh)lp.mesh.visible=true;
+  mirrorMesh.visible=false;
+  var sa=renderer.shadowMap.autoUpdate;
+  renderer.shadowMap.autoUpdate=false;
+  var oldRT=renderer.getRenderTarget();
+  renderer.setRenderTarget(mirrorRT);
+  renderer.clear();
+  renderer.render(scene,mirrorCam);
+  renderer.setRenderTarget(oldRT);
+  renderer.shadowMap.autoUpdate=sa;
+  mirrorMesh.visible=true;
+  if(lp&&lp.mesh)lp.mesh.visible=false;
+  MSTAT.renders++;
+}
+
 function buildWorld(){
+  makeTextures();
+  /* --- painted sky dome: warm gradient, puffy clouds, sun glow --- */
+  (function(){
+    var tex=canvasTex(1024,512,function(g,w,h){
+      var grad=g.createLinearGradient(0,0,0,h);
+      grad.addColorStop(0,'#3f8ede');
+      grad.addColorStop(0.42,'#8ec6ef');
+      grad.addColorStop(0.58,'#cfe8f6');
+      grad.addColorStop(0.62,'#e8e2cf');
+      grad.addColorStop(1,'#cfc6ad');
+      g.fillStyle=grad;g.fillRect(0,0,w,h);
+      function puff(cx,cy,s){
+        for(var i=0;i<8;i++){
+          var ox=(Math.random()-0.5)*s*2.6, oy=(Math.random()*0.55-0.2)*s;
+          var r=s*(0.4+Math.random()*0.55);
+          var gr=g.createRadialGradient(cx+ox,cy+oy,r*0.15,cx+ox,cy+oy,r);
+          gr.addColorStop(0,'rgba(255,255,255,0.98)');
+          gr.addColorStop(0.65,'rgba(255,255,255,0.85)');
+          gr.addColorStop(1,'rgba(255,255,255,0)');
+          g.fillStyle=gr;g.beginPath();g.arc(cx+ox,cy+oy,r,0,6.3);g.fill();
+        }
+      }
+      for(var i=0;i<18;i++)puff(Math.random()*w,40+Math.random()*190,18+Math.random()*26);
+      /* soft glow where the sun really is */
+      var sg=g.createRadialGradient(406,112,6,406,112,120);
+      sg.addColorStop(0,'rgba(255,246,214,0.95)');
+      sg.addColorStop(0.25,'rgba(255,240,190,0.5)');
+      sg.addColorStop(1,'rgba(255,240,190,0)');
+      g.fillStyle=sg;g.beginPath();g.arc(406,112,120,0,6.3);g.fill();
+    });
+    skyMesh=new THREE.Mesh(new THREE.SphereGeometry(300,28,14),
+      new THREE.MeshBasicMaterial({map:tex,side:THREE.BackSide,fog:false,depthWrite:false}));
+    skyMesh.position.y=-15;
+    scene.add(skyMesh);
+  })();
   /* --- outside --- */
-  scene.add(mkPlane(420,420,0x6da34d,0,0,0));
-  scene.add(mkPlane(11,40,0x4a4e55,0,0.02,27));
+  (function(){
+    var gr=new THREE.Mesh(new THREE.PlaneGeometry(420,420),lam(0xffffff,{map:TEX.grass}));
+    gr.rotation.x=-Math.PI/2;gr.receiveShadow=true;scene.add(gr);
+    var dv=new THREE.Mesh(new THREE.PlaneGeometry(11,40),lam(0xffffff,{map:TEX.asphalt}));
+    dv.rotation.x=-Math.PI/2;dv.position.set(0,0.02,27);dv.receiveShadow=true;scene.add(dv);
+  })();
   scene.add(mkPlane(420,15,0x3a3d42,0,0.03,50));
   for(var dx=-190;dx<=190;dx+=14)scene.add(mkBox(3.4,0.02,0.45,0xdde0a8,dx,0.05,50,true));
 
+  /* --- desert hills on the horizon, rocks and grass tufts by the road --- */
+  [[-150,-120,62,30],[140,-140,72,36],[-60,-180,55,26],[60,-170,48,22],
+   [-185,20,40,18],[185,-20,44,20],[-120,150,58,26],[120,160,64,30],[10,195,70,32]
+  ].forEach(function(h,i){
+    var cone=new THREE.ConeGeometry(h[2],h[3],7+(i%3));
+    var m=new THREE.Mesh(cone,flat(i%2?0xd9b183:0xc9a072));
+    m.position.set(h[0],h[3]/2-0.5,h[1]);m.rotation.y=i*1.3;scene.add(m);
+    var s=new THREE.Mesh(new THREE.ConeGeometry(h[2]*1.07,h[3]*0.3,7+(i%3)),
+      flat(i%2?0x7fae57:0x86b85e));
+    s.position.set(h[0],h[3]*0.15-0.5,h[1]);s.rotation.y=i*1.3;scene.add(s);
+  });
+  [[9,18,0.9],[11,24,1.3],[-9,20,1.1],[-12,29,0.8],[8,33,1.5],[-10,38,1.2],
+   [13,41,0.9],[6,15,0.6],[-7,14,0.7],[15,27,1.1]
+  ].forEach(function(r,i){
+    var m=new THREE.Mesh(new THREE.DodecahedronGeometry(r[2],0),
+      flat(i%2?0xc9a877:0xb8946a));
+    m.position.set(r[0],r[2]*0.55,r[1]);
+    m.rotation.set(i*0.7,i*1.1,i*0.4);
+    m.castShadow=true;m.receiveShadow=true;scene.add(m);
+  });
+  function tuft(x,z,s){
+    for(var i=0;i<3;i++){
+      var c=new THREE.Mesh(new THREE.ConeGeometry(0.09*s,0.52*s,5),
+        flat(i%2?0x4f9b34:0x63b23c));
+      c.position.set(x+(i-1)*0.15*s,0.25*s,z+(i%2?0.1:-0.08)*s);
+      c.rotation.z=(i-1)*0.25;scene.add(c);
+    }
+  }
+  [[6,14],[-6,15],[9,17],[-9,19],[12,22],[-13,25],[7,27],[-8,30],[10,35],
+   [-11,33],[14,38],[-14,40],[5,42],[-6,44]
+  ].forEach(function(t){tuft(t[0],t[1],1+Math.random()*0.5);});
+
   /* --- floor --- */
-  scene.add(mkPlane(34,22,0x8f959d,0,0.05,-2));
+  (function(){
+    var fl=new THREE.Mesh(new THREE.PlaneGeometry(34,22),lam(0xffffff,{map:TEX.floor}));
+    fl.rotation.x=-Math.PI/2;fl.position.set(0,0.05,-2);fl.receiveShadow=true;scene.add(fl);
+  })();
   scene.add(mkPlane(34,1.6,0x6f757d,0,0.06,-12.2));
   for(var i=0;i<20;i++){
     if(i>=7&&i<=12)continue;
@@ -536,6 +937,8 @@ function buildWorld(){
   twoToneWall(0,0.5,17.25,-2,22.6,'z');      // right
   twoToneWall(0,0.5,-12.75,9.25,9.4,'x');    // front-left
   twoToneWall(0,0.5,12.75,9.25,9.4,'x');     // front-right
+  /* mirror by the entrance — you can see yourself and your friends */
+  buildMirror(16.94,2.05,1.4,2.0,1.6);
   scene.add(mkBox(0.9,4.6,0.9,0x8e97a3,-8.4,2.3,9.25));
   scene.add(mkBox(0.9,4.6,0.9,0x8e97a3,8.4,2.3,9.25));
   scene.add(mkBox(17.8,1.1,0.62,0x8e97a3,0,4.65,9.25));
@@ -627,6 +1030,7 @@ function buildWorld(){
     tool.rotation.x=-Math.PI/2;
     holder.add(tool);
     scene.add(holder);
+    stockMeshes['t'+k]=tool;
     scene.add(mkBox(0.1,0.1,0.1,0x9aa1aa,s.x+0.05,1.45,s.z,true));
     var lb=makeLabel(TOOLS[k].name+'  [E]','#4aa3ff');
     lb.position.set(s.x+0.7,2.6,s.z);scene.add(lb);
@@ -650,7 +1054,8 @@ function buildWorld(){
     c.position.set(x,2.27,-12.3);c.castShadow=true;scene.add(c);
   });
   BINS.forEach(function(b){
-    var tint={'Engine':0x8e6b3f,'Tire':0x37474f,'Bumper':0x546e7a}[b.n];
+    var tint={'Engine':0x8e6b3f,'Tire':0x37474f,'Bumper':0x546e7a,
+      'Door':0x78909c,'Paint':0xc62828}[b.n];
     scene.add(mkBox(1.7,0.62,0.95,0x6f5138,b.x,1.28,b.z));
     scene.add(mkBox(1.72,0.1,0.98,0x513a27,b.x,1.62,b.z));
     scene.add(mkBox(1.5,0.4,0.07,tint,b.x,1.3,b.z-0.46));
@@ -668,6 +1073,19 @@ function buildWorld(){
       var t2=new THREE.Mesh(new THREE.CylinderGeometry(0.19,0.19,0.34,10),lam(0xb0bec5));
       t2.rotation.z=Math.PI/2;spare.add(t2);
       spare.position.set(b.x,2.1,b.z);
+    }else if(b.n==='Door'){
+      spare=new THREE.Group();
+      spare.add(mkBox(0.16,0.55,1.1,0xb0bec5,0,0,0));
+      spare.add(mkBox(0.2,0.06,0.24,0x808a94,-0.14,0.1,0.26));
+      spare.rotation.y=0.35;
+      spare.position.set(b.x,2.0,b.z);
+    }else if(b.n==='Paint'){
+      spare=new THREE.Group();
+      spare.add(mkBox(0.34,0.4,0.34,0xe53935,0,0,0));
+      spare.add(mkBox(0.37,0.06,0.37,0xb71c1c,0,0.23,0));
+      var hnd=new THREE.Mesh(new THREE.TorusGeometry(0.13,0.022,6,12,Math.PI),lam(0x90a4ae));
+      hnd.position.y=0.26;spare.add(hnd);
+      spare.position.set(b.x,1.98,b.z);
     }else{
       spare=new THREE.Group();
       spare.add(mkBox(1.3,0.2,0.22,0xb0bec5,0,0,0));
@@ -677,6 +1095,12 @@ function buildWorld(){
     }
     spare.traverse(function(o){if(o.isMesh)o.castShadow=true;});
     scene.add(spare);
+    stockMeshes[b.n]=spare;
+    var emp=makeLabel('EMPTY','#ff6b6b');
+    emp.scale.set(1.05,0.3,1);
+    emp.position.set(b.x,2.28,b.z+0.55);
+    emp.visible=false;scene.add(emp);
+    stockMeshes['E'+b.n]=emp;
     var lb=makeLabel(b.n+'  [E]','#7cfc9a');
     lb.position.set(b.x,2.75,b.z);scene.add(lb);
   });
@@ -743,7 +1167,7 @@ function buildWorld(){
     scene.add(mkBox(0.9,0.1,6.4,0x78909c,-16.4,y,4.6));
   });
   [[3.2,1.05,0x795548],[4.7,1.05,0x8d6e63],[6.2,2.05,0xa1887f],[4.0,2.05,0x6d4c33]].forEach(function(o){
-    scene.add(mkBox(0.75,0.6,0.9,o[2],-16.4,o[1],o[0]));
+    scene.add(mkBox(0.75,0.6,0.9,lam(o[2],{map:TEX.wood}),-16.4,o[1],o[0]));
   });
 
   /* --- tyre stacks / barrels / crates / desk --- */
@@ -758,10 +1182,17 @@ function buildWorld(){
   tireStack(-15.2,-9.2,3);tireStack(-15.2,-7.9,2);tireStack(15.4,6.2,3);
 
   function barrel(x,z,c){
-    var b=new THREE.Mesh(new THREE.CylinderGeometry(0.55,0.55,1.5,12),lam(c));
+    var b=new THREE.Mesh(new THREE.CylinderGeometry(0.55,0.55,1.5,18),lam(c));
     b.position.set(x,0.75,z);b.castShadow=true;b.receiveShadow=true;scene.add(b);
-    scene.add(mkBox(1.14,0.1,1.14,shade(c,-0.2),x,1.1,z,true));
-    scene.add(mkBox(1.14,0.1,1.14,shade(c,-0.2),x,0.5,z,true));
+    /* rolled ribs around the drum + lid with a cap */
+    [0.42,0.75,1.08].forEach(function(y){
+      var r=new THREE.Mesh(new THREE.TorusGeometry(0.556,0.032,6,22),lam(shade(c,-0.28)));
+      r.rotation.x=Math.PI/2;r.position.set(x,y,z);r.castShadow=true;scene.add(r);
+    });
+    var lid=new THREE.Mesh(new THREE.CylinderGeometry(0.5,0.5,0.07,18),lam(shade(c,-0.38)));
+    lid.position.set(x,1.52,z);lid.castShadow=true;scene.add(lid);
+    var cap=new THREE.Mesh(new THREE.CylinderGeometry(0.085,0.085,0.05,8),lam(0xb0bec5));
+    cap.position.set(x+0.28,1.57,z);scene.add(cap);
   }
   barrel(15.6,-9.4,0x1565c0);barrel(15.6,-7.9,0x00897b);
 
@@ -776,24 +1207,111 @@ function buildWorld(){
   scene.add(mkBox(1.2,1.0,1.2,0x8d6e63,14.6,1.7,7.3));
   scene.add(mkBox(1.0,0.9,1.0,0xa1887f,13.0,0.45,7.6));
 
+  /* --- shop computer terminal at the back wall --- */
+  (function(){
+    var X=SHOP_SPOT.x, Z=-12.3;
+    scene.add(mkBox(2.2,0.09,1.05,0x6d4c33,X,0.75,Z,true));          /* desk top */
+    [[-1.0,-0.44],[1.0,-0.44],[-1.0,0.44],[1.0,0.44]].forEach(function(o){
+      scene.add(mkBox(0.07,0.75,0.07,0x37474f,X+o[0],0.375,Z+o[1],true));
+    });
+    scene.add(mkBox(0.42,0.03,0.26,0x263238,X,0.81,Z-0.28,true));     /* monitor base */
+    scene.add(mkBox(0.07,0.26,0.07,0x263238,X,0.94,Z-0.28,true));     /* monitor pole */
+    scene.add(mkBox(0.94,0.62,0.06,0x1c2228,X,1.36,Z-0.28,true));     /* monitor shell */
+    (function(){
+      var tex=canvasTex(512,330,function(g,w,h){
+        g.fillStyle='#0a121c';g.fillRect(0,0,w,h);
+        g.fillStyle='#0e2130';g.fillRect(0,0,w,52);
+        g.font='bold 26px "Segoe UI",Arial';g.textAlign='left';g.textBaseline='middle';
+        g.fillStyle='#7cf3a8';g.fillText('TURBO PARTS ONLINE',16,27);
+        var rows=[['\u{1F527} extra wrench','$60','#39d0ff'],
+                  ['\u{26A1} power tools','$220','#ffd166'],
+                  ['\u{1F45F} comfy boots','$180','#ff9bb0'],
+                  ['\u{1F7E3} neon sign','$150','#ff7ad9']];
+        rows.forEach(function(r,i){
+          var y=80+i*52;
+          g.fillStyle=(i%2)?'#0c1826':'#0a1420';g.fillRect(10,y-20,w-20,44);
+          g.font='22px "Segoe UI",Arial';g.fillStyle=r[2];
+          g.fillText(r[0],22,y+1);
+          g.textAlign='right';g.fillStyle='#9fd8b4';g.fillText(r[1],w-22,y+1);
+          g.textAlign='left';
+        });
+        g.fillStyle='#7cfc9a';g.font='bold 20px "Segoe UI",Arial';
+        g.fillText('\u{1F4B0} press E to open the shop',22,h-24);
+      });
+      var scr=new THREE.Mesh(new THREE.PlaneGeometry(0.86,0.55),
+        new THREE.MeshBasicMaterial({map:tex}));
+      scr.position.set(X,1.36,Z-0.245);scene.add(scr);
+    })();
+    scene.add(mkBox(0.55,0.03,0.2,0x232a33,X-0.25,0.81,Z+0.26,true));   /* keyboard */
+    scene.add(mkBox(0.09,0.045,0.14,0x232a33,X+0.45,0.81,Z+0.24,true)); /* mouse */
+    var st=new THREE.Mesh(new THREE.CylinderGeometry(0.24,0.24,0.07,12),lam(0x8d6e63));
+    st.position.set(X,0.62,Z+1.05);st.castShadow=true;scene.add(st);
+    scene.add(mkBox(0.07,0.6,0.07,0x455a64,X,0.31,Z+1.05,true));
+    scene.add(mkBox(0.5,0.05,0.5,0x37474f,X,0.04,Z+1.05,true));
+    var tag=makeLabel('SHOP','#7cfc9a');
+    tag.position.set(X,2.35,Z-0.1);scene.add(tag);
+  })();
+
+  /* --- wall clock, real time --- */
+  (function(){
+    var g=new THREE.Group();g.position.set(2.2,3.18,-12.96);
+    var body=new THREE.Mesh(new THREE.CylinderGeometry(0.3,0.3,0.08,24),lam(0x263238));
+    body.rotation.x=Math.PI/2;body.castShadow=true;g.add(body);
+    var face=new THREE.Mesh(new THREE.CircleGeometry(0.26,24),
+      new THREE.MeshBasicMaterial({color:0xf4f1e8}));
+    face.position.z=0.045;g.add(face);
+    for(var i=0;i<12;i++){
+      var a=i/12*Math.PI*2;
+      var tick=new THREE.Mesh(new THREE.BoxGeometry(i%3?0.014:0.022,i%3?0.035:0.052,0.01),lam(0x263238));
+      tick.position.set(Math.sin(a)*0.212,Math.cos(a)*0.212,0.05);
+      tick.rotation.z=-a;g.add(tick);
+    }
+    clockHour=new THREE.Mesh(new THREE.BoxGeometry(0.026,0.125,0.012),lam(0x1b1b1b));
+    clockHour.geometry.translate(0,0.055,0);clockHour.position.z=0.054;g.add(clockHour);
+    clockMin=new THREE.Mesh(new THREE.BoxGeometry(0.018,0.185,0.012),lam(0x1b1b1b));
+    clockMin.geometry.translate(0,0.085,0);clockMin.position.z=0.059;g.add(clockMin);
+    var hub=new THREE.Mesh(new THREE.CylinderGeometry(0.02,0.02,0.022,10),lam(0xc62828));
+    hub.rotation.x=Math.PI/2;hub.position.z=0.062;g.add(hub);
+    scene.add(g);
+  })();
+
   /* --- outside --- */
   function tree(x,z,s){
     var g=new THREE.Group();
-    var trunk=new THREE.Mesh(new THREE.CylinderGeometry(0.28*s,0.36*s,2.2*s,7),lam(0x6d4c33));
-    trunk.position.y=1.1*s;trunk.castShadow=true;g.add(trunk);
-    var c1=new THREE.Mesh(new THREE.ConeGeometry(1.9*s,2.6*s,7),lam(0x3f9142));
-    c1.position.y=3.1*s;c1.castShadow=true;g.add(c1);
-    var c2=new THREE.Mesh(new THREE.ConeGeometry(1.4*s,2.1*s,7),lam(0x4aa34f));
-    c2.position.y=4.3*s;c2.castShadow=true;g.add(c2);
+    var trunk=new THREE.Mesh(new THREE.CylinderGeometry(0.26*s,0.38*s,2.0*s,7),lam(0x7a5230));
+    trunk.position.y=1.0*s;trunk.castShadow=true;g.add(trunk);
+    var cols=[0x2f8a3e,0x3fa24a,0x51b85c];
+    [[2.0,2.5,2.9,0],[1.55,2.2,4.15,1],[1.1,1.9,5.25,2]].forEach(function(c){
+      var m=new THREE.Mesh(new THREE.ConeGeometry(c[0]*s,c[1]*s,7),
+        flat(cols[c[3]]));
+      m.position.y=c[2]*s;m.rotation.y=(Math.abs(x)+z+c[2])*0.7;
+      m.castShadow=true;g.add(m);
+    });
     g.position.set(x,0,z);scene.add(g);
   }
   tree(-24,6,1.1);tree(-27,20,0.9);tree(-23,34,1.2);
   tree(24,8,1.0);tree(27,23,1.15);tree(22,37,0.95);
   tree(-30,-6,1.05);tree(30,-2,1.1);
+  tree(-20,26,0.8);tree(20,15,0.85);tree(-33,14,1.0);tree(33,30,1.05);
+  tree(-26,45,1.0);tree(26,47,0.95);
   for(var fx=-40;fx<=40;fx+=4){
     if(Math.abs(fx)<8)continue;
-    scene.add(mkBox(0.18,1.1,0.18,0x9e9e9e,fx,0.55,43));
+    scene.add(mkBox(0.2,1.15,0.2,fx%8?0x8a6a44:0x7a5c3a,fx,0.57,43));
   }
+
+  /* solid props so you can't walk through anything */
+  solid(15.6,-9.4,1.3,1.3);solid(15.6,-7.9,1.3,1.3);   /* oil drums */
+  solid(14.8,7.5,1.75,1.75);solid(13.0,7.6,1.15,1.15); /* crate stack */
+  solid(-14,5.6,3.15,1.45);                            /* reception desk */
+  solid(-13.5,14.5,3.15,2.05);                         /* dumpster */
+  solid(8,-12.3,2.35,1.2);                             /* shop computer desk */
+  solid(13,-12.2,5.05,1.75);                           /* workbench */
+  solid(-14,-12.3,2.75,1.1);                           /* toolbox cabinet */
+  solid(-4.4,-12.72,7.7,0.5);                          /* parts rack */
+  BINS.forEach(function(b){solid(b.x,b.z,1.85,1.05);}); /* spare part bins */
+  [[9,18,0.9],[11,24,1.3],[-9,20,1.1],[-12,29,0.8],[8,33,1.5],[-10,38,1.2],
+   [13,41,0.9],[6,15,0.6],[-7,14,0.7],[15,27,1.1]
+  ].forEach(function(r){solid(r[0],r[1],r[2]*1.5,r[2]*1.5);});   /* rocks */
 }
 buildWorld();
 
@@ -831,6 +1349,15 @@ function buildSpare(kind,s){
     t.rotation.z=Math.PI/2;g.add(t);
     var r=new THREE.Mesh(new THREE.CylinderGeometry(0.15*s,0.15*s,0.26*s,10),lam(0xb0bec5));
     r.rotation.z=Math.PI/2;g.add(r);
+  }else if(kind==='Door'){
+    g.add(mkBox(0.12*s,0.58*s,1.2*s,0xb0bec5,0,0,0));
+    g.add(mkBox(0.16*s,0.06*s,0.26*s,0x808a94,-0.1*s,0.1*s,0.28*s));
+    g.add(mkBox(0.14*s,0.5*s,0.34*s,0x7f95a3,0.02*s,0.04*s,-0.28*s));
+  }else if(kind==='Paint'){
+    g.add(mkBox(0.3*s,0.32*s,0.3*s,0xe53935,0,0,0));
+    g.add(mkBox(0.33*s,0.05*s,0.33*s,0xb71c1c,0,0.18*s,0));
+    var h=new THREE.Mesh(new THREE.TorusGeometry(0.12*s,0.02*s,6,12,Math.PI),lam(0x90a4ae));
+    h.position.y=0.2*s;g.add(h);
   }else{
     g.add(mkBox(1.05*s,0.16*s,0.18*s,0xb0bec5,0,0,0));
     g.add(mkBox(0.2*s,0.2*s,0.18*s,0x808a94,-0.48*s,0,0));
@@ -865,14 +1392,17 @@ function buildChar(name,color){
   inner.add(mkBox(0.44,0.5,0.18,0x37474f,0,1.2,-0.3));
   inner.add(mkBox(0.46,0.1,0.2,0x2b323b,0,1.5,-0.28));
 
+  var headNode=new THREE.Group();          /* neck pivot — tilts when looking up/down */
+  headNode.position.y=1.62;
+  inner.add(headNode);
   var head=new THREE.Mesh(new THREE.BoxGeometry(0.5,0.46,0.46),[
     lam(skin),lam(skin),lam(skin),lam(skin),
     new THREE.MeshLambertMaterial({map:faceTexture(skinHex)}),lam(skin)
   ]);
-  head.position.y=1.79;head.castShadow=true;inner.add(head);
-  inner.add(mkBox(0.54,0.17,0.5,shirt,0,2.06,0));
-  inner.add(mkBox(0.54,0.07,0.24,dark,0,1.99,0.33));
-  inner.add(mkBox(0.1,0.1,0.1,0xffca28,0,2.16,0));
+  head.position.y=0.17;head.castShadow=true;headNode.add(head);
+  headNode.add(mkBox(0.54,0.17,0.5,shirt,0,0.44,0));       /* cap */
+  headNode.add(mkBox(0.54,0.07,0.24,dark,0,0.37,0.33));    /* cap brim */
+  headNode.add(mkBox(0.1,0.1,0.1,0xffca28,0,0.54,0));      /* cap light */
 
   function arm(x){
     var grp=new THREE.Group();grp.position.set(x,1.48,0);
@@ -898,19 +1428,19 @@ function buildChar(name,color){
   carryNode.visible=false;
   inner.add(carryNode);
   var carries={};
-  ['Engine','Tire','Bumper'].forEach(function(n){
-    var s=buildSpare(n,n==='Bumper'?0.75:0.9);
+  CARRY_PARTS.forEach(function(n){
+    var s=buildSpare(n,carryScale(n,0.9));
     s.visible=false;carryNode.add(s);carries[n]=s;
   });
 
   g.userData={inner:inner,legL:legL,legR:legR,armL:armL,armR:armR,
-    tools:tools,carries:carries,carryNode:carryNode};
+    tools:tools,carries:carries,carryNode:carryNode,head:headNode};
   return g;
 }
 function setCharGear(p){
   var u=p.mesh.userData;
   [1,2,3].forEach(function(k){u.tools[k].visible=(k===p.tool);});
-  ['Engine','Tire','Bumper'].forEach(function(n){u.carries[n].visible=(p.carry===n);});
+  CARRY_PARTS.forEach(function(n){u.carries[n].visible=(p.carry===n);});
   u.carryNode.visible=!!p.carry;
 }
 function poseChar(p,phase){
@@ -954,6 +1484,8 @@ function poseChar(p,phase){
     u.inner.position.y=Math.sin(phase*1.6)*0.014;
     u.inner.rotation.x=0;
   }
+  /* head tilts the same way that player is looking (camera pitch) */
+  u.head.rotation.x=-(p.pitch||0);
 }
 
 /* ---------------- car ---------------- */
@@ -963,10 +1495,11 @@ function buildCarMesh(car){
       chrome=0xc9d2da, hasBumper=car.parts.every(function(p){return p.n!=='Bumper';});
 
   g.add(mkBox(1.9,0.32,4.1,dark,0,0.44,0));
-  g.add(mkBox(2.0,0.6,4.4,body,0,0.86,0));
-  g.add(mkBox(1.96,0.14,1.35,body,0,1.16,1.4));
-  g.add(mkBox(1.96,0.14,1.0,body,0,1.16,-1.65));
-  g.add(mkBox(1.7,0.6,2.1,shade(body,0.08),0,1.44,-0.3));
+  var bodyMat=lam(body), bodyMat2=lam(shade(body,0.08));
+  g.add(mkBox(2.0,0.6,4.4,bodyMat,0,0.86,0));
+  g.add(mkBox(1.96,0.14,1.35,bodyMat,0,1.16,1.4));
+  g.add(mkBox(1.96,0.14,1.0,bodyMat,0,1.16,-1.65));
+  g.add(mkBox(1.7,0.6,2.1,bodyMat2,0,1.44,-0.3));
   var ws=mkBox(1.6,0.6,0.09,glass,0,1.4,0.82);ws.rotation.x=-0.52;g.add(ws);
   var rw=mkBox(1.6,0.54,0.09,glass,0,1.4,-1.44);rw.rotation.x=0.55;g.add(rw);
   g.add(mkBox(0.07,0.4,1.7,glass,-0.85,1.5,-0.3));
@@ -1030,7 +1563,7 @@ function buildCarMesh(car){
     }
   }
 
-  g.userData={wheels:wheels,partMeshes:partMeshes,smoke:smoke};
+  g.userData={wheels:wheels,partMeshes:partMeshes,smoke:smoke,bodyMats:[bodyMat,bodyMat2]};
   return g;
 }
 function partWorld(car,i){
@@ -1044,6 +1577,122 @@ var players=new Map();
 var cars=new Map();
 var localId=null, isHost=false, myCode='';
 var money=0, carsFixed=0;
+
+/* ---------------- shop: shared money, limited stock, one-time upgrades ---------------- */
+var SHOP=[
+  {id:'tw',n:'Extra Wrench',     price:60, kind:'tool',v:1,stock:2,
+    desc:'a second wrench drops on the floor — share with a friend'},
+  {id:'ts',n:'Extra Screwdriver',price:80, kind:'tool',v:2,stock:2,
+    desc:'a second screwdriver drops on the floor — share with a friend'},
+  {id:'th',n:'Extra Hammer',     price:90, kind:'tool',v:3,stock:2,
+    desc:'a second hammer drops on the floor — share with a friend'},
+  {id:'pe',n:'Spare Engine',     price:90, kind:'part',v:'Engine',desc:'an engine drops on the floor by the desk'},
+  {id:'pt',n:'Spare Tire',       price:70, kind:'part',v:'Tire',  desc:'a tire drops on the floor by the desk'},
+  {id:'pb',n:'Spare Bumper',     price:80, kind:'part',v:'Bumper',desc:'a bumper drops on the floor by the desk'},
+  {id:'pd',n:'Spare Door',       price:80, kind:'part',v:'Door',  desc:'a door drops on the floor by the desk'},
+  {id:'pc',n:'Paint Can',        price:70, kind:'part',v:'Paint', desc:'a paint can drops on the floor — spray a whole car'},
+  {id:'uf',n:'Power Tools',      icon:'\u{26A1}',price:220,kind:'up',f:'fix',
+    desc:'everybody fixes cars 35% faster'},
+  {id:'us',n:'Comfy Boots',      icon:'\u{1F45F}',price:180,kind:'up',f:'spd',
+    desc:'everybody walks 18% faster'},
+  {id:'uc',n:'Express Freight',  icon:'\u{1F69A}',price:260,kind:'up',f:'car',
+    desc:'new customers arrive 40% sooner'},
+  {id:'un',n:'Neon Sign',        icon:'\u{1F7E3}',price:150,kind:'up',f:'neon',
+    desc:'a groovy neon sign for the garage wall'}
+];
+function shopItem(id){
+  for(var i=0;i<SHOP.length;i++)if(SHOP[i].id===id)return SHOP[i];
+  return null;
+}
+function resetShop(){
+  stock={};SHOP.forEach(function(it){if(it.kind==='tool')stock[it.id]=it.stock;});
+  ups={fix:0,spd:0,car:0,neon:0};
+  removeNeonSign();
+}
+/* host-authoritative purchase: validates the whole cart before paying a cent */
+function hostBuy(pid,ids){
+  if(!Array.isArray(ids)||ids.length>10)return;
+  var total=0,buys=[],seen={};
+  for(var i=0;i<ids.length;i++){
+    var it=shopItem(String(ids[i]));
+    if(!it||seen[it.id])continue;seen[it.id]=1;
+    if(it.kind==='up'){if(ups[it.f])continue;}
+    else if(it.kind==='tool'&&(stock[it.id]||0)<=0)continue;
+    total+=it.price;buys.push(it);
+  }
+  if(!buys.length){shopTell(pid,'Cart is empty — everything in it is owned or sold out');return;}
+  if(total>money){shopTell(pid,'Not enough money: that costs $'+total+' but you have $'+money);return;}
+  money-=total;
+  var names=[];
+  buys.forEach(function(it){
+    if(it.kind==='up'){ups[it.f]=1;}
+    else if(it.kind==='tool'){
+      stock[it.id]--;
+      inv['t'+it.v]=(inv['t'+it.v]||0)+1;
+      spawnFloorItem('tool',it.v,SHOP_SPOT.x+(Math.random()*1.4-0.7),SHOP_SPOT.z+1.1);
+    }else if(it.kind==='part'){
+      inv[it.v]=(inv[it.v]||0)+1;
+      spawnFloorItem('part',it.v,SHOP_SPOT.x+(Math.random()*1.4-0.7),SHOP_SPOT.z+1.1);
+    }
+    names.push(it.n);
+  });
+  updateStockVisuals();
+  updateNeonSign();
+  sendSnap();
+  SFX.cash();
+  showToast('Bought '+names.join(' + ')+'  \u{2212}$'+total,'#7cfc9a');
+  log('shop: purchase by',pid,names.join(','));
+}
+function shopTell(pid,text){
+  var pl=players.get(pid);
+  if(pl&&pl.isLocal){showToast(text,'#ff9bb0');return;}
+  for(var i=0;i<conns.length;i++){
+    if(conns[i].peer===pid){try{conns[i].send({t:'shopmsg',m:text});}catch(e){}break;}
+  }
+}
+function fixRateMul(){return ups.fix?1.35:1;}
+function walkMul(){return ups.spd?1.18:1;}
+
+/* --- neon sign (bought in the shop, left wall by the mirror) --- */
+function buildNeonSign(){
+  if(neonMeshes.length)return;
+  var tex=canvasTex(512,160,function(g,w,h){
+    g.fillStyle='#0d0d16';roundRect(g,4,4,w-8,h-8,22);g.fill();
+    g.strokeStyle='#3a2b45';g.lineWidth=4;roundRect(g,4,4,w-8,h-8,22);g.stroke();
+    g.font='bold 88px "Segoe UI",Arial';g.textAlign='center';g.textBaseline='middle';
+    g.shadowColor='#ff3fc4';g.shadowBlur=38;
+    g.fillStyle='#ff9ae2';g.fillText('TURBO FIX',w/2,h/2-14);
+    g.shadowColor='#3fd8ff';g.shadowBlur=22;
+    g.font='bold 28px "Segoe UI",Arial';
+    g.fillStyle='#a8efff';g.fillText('\u00b7 OPEN 24/7 \u00b7',w/2,h/2+48);
+  });
+  var m=new THREE.Mesh(new THREE.PlaneGeometry(2.9,0.92),
+    new THREE.MeshBasicMaterial({map:tex}));
+  m.position.set(-16.9,2.55,1.4);m.rotation.y=Math.PI/2;
+  scene.add(m);neonMeshes.push(m);
+  var glow=new THREE.Mesh(new THREE.PlaneGeometry(3.7,1.6),
+    new THREE.MeshBasicMaterial({color:0xff3fc4,transparent:true,opacity:0.15,
+      blending:THREE.AdditiveBlending,depthWrite:false}));
+  glow.position.set(-16.78,2.55,1.4);glow.rotation.y=Math.PI/2;
+  scene.add(glow);neonMeshes.push(glow);
+}
+function removeNeonSign(){
+  neonMeshes.forEach(function(m){scene.remove(m);});
+  neonMeshes=[];
+}
+function updateNeonSign(){
+  if(!!ups.neon===!!neonMeshes.length)return;
+  if(ups.neon)buildNeonSign();else removeNeonSign();
+}
+/* --- wall clock shows the real time --- */
+function tickClock(t){
+  if(!clockHour||t<clockNext)return;
+  clockNext=t+2;
+  var d=new Date();
+  var mm=d.getMinutes()+d.getSeconds()/60,hh=(d.getHours()%12)+mm/60;
+  clockHour.rotation.z=-hh/12*Math.PI*2;
+  clockMin.rotation.z=-mm/60*Math.PI*2;
+}
 var floorItems=[], floorUid=0, takenItems={};
 
 function addPlayer(id,name,color,isLocal,spawn){
@@ -1053,9 +1702,9 @@ function addPlayer(id,name,color,isLocal,spawn){
   mesh.position.set(spawn.x,0,spawn.z);
   scene.add(mesh);
   var p={id:id,name:name,color:color,mesh:mesh,tag:tag,isLocal:!!isLocal,
-    net:{x:spawn.x,y:0,z:spawn.z,ry:Math.PI,fixing:false,tool:0,carry:''},
+    net:{x:spawn.x,y:0,z:spawn.z,ry:Math.PI,pi:0,fixing:false,tool:0,carry:''},
     pos:new THREE.Vector3(spawn.x,0,spawn.z),
-    vy:0,ry:Math.PI,phase:0,moving:false,fixing:false,
+    vy:0,ry:Math.PI,pitch:0,phase:0,moving:false,fixing:false,
     tool:0,carry:'',fixAccum:0};
   players.set(id,p);
   if(isLocal)mesh.visible=false;
@@ -1073,6 +1722,8 @@ function addCar(data){
   var car={id:data.i,color:data.c,x:data.x,z:data.z,ry:data.r,st:data.s||'in',
     nx:data.x,nz:data.z,nry:data.r,parts:[],toasted:[],removed:[],prevSt:null,group:null,
     path:null,wp:0,bay:null};
+  car.pcol=data.pc||data.c;                                  /* fresh color after paint */
+  car.scuff=mixHex(car.color,0x6e7278,0.62);                 /* dull before paint job */
   (data.p||[]).forEach(function(pp){
     car.parts.push({n:pp[0],p:pp[1]});
     car.toasted.push(pp[1]>=1);
@@ -1126,6 +1777,9 @@ function hostThrow(p){
   p.carry='';p.net.carry='';p.tool=0;p.net.tool=0;
   setCharGear(p);
   holdGuard=performance.now()+900;
+  if(kind==='tool')inv['t'+v]=(inv['t'+v]||0)+1;
+  else inv[v]=(inv[v]||0)+1;
+  updateStockVisuals();
   var fx=Math.sin(p.net.ry), fz=Math.cos(p.net.ry);
   spawnFloorItem(kind,v,p.net.x+fx*0.7,p.net.z+fz*0.7,fx,fz);
   sendSnap();
@@ -1137,6 +1791,9 @@ function hostTake(p,id){
   if(dist2(p.net.x,p.net.z,it.x,it.z)>3.4)return;
   var kind=it.k,v=it.v;
   removeFloorItem(it.id);
+  if(kind==='tool')inv['t'+v]=Math.max(0,(inv['t'+v]||0)-1);
+  else inv[v]=Math.max(0,(inv[v]||0)-1);
+  updateStockVisuals();
   if(kind==='tool'){p.tool=v;p.net.tool=v;p.carry='';p.net.carry='';}
   else{p.carry=v;p.net.carry=v;p.tool=0;p.net.tool=0;}
   setCharGear(p);
@@ -1183,12 +1840,40 @@ function clampPlayer(pos){
   pos.z=clamp(pos.z,CFG.bounds.z0,CFG.bounds.z1);
 }
 
+/* solid props — nothing walk-through */
+function solid(x,z,w,d){COLLIDERS.push({x0:x-w/2,x1:x+w/2,z0:z-d/2,z1:z+d/2});}
+function collideProps(pos){
+  var r=0.35;
+  for(var i=0;i<COLLIDERS.length;i++){
+    var c=COLLIDERS[i];
+    var cx=clamp(pos.x,c.x0,c.x1), cz=clamp(pos.z,c.z0,c.z1);
+    var dx=pos.x-cx, dz=pos.z-cz, d2=dx*dx+dz*dz;
+    if(d2>=r*r)continue;
+    if(d2>1e-5){
+      var dd=Math.sqrt(d2);
+      pos.x=cx+dx/dd*r; pos.z=cz+dz/dd*r;
+    }else{
+      var l=pos.x-c.x0,ri=c.x1-pos.x,b=pos.z-c.z0,t=c.z1-pos.z;
+      var m=Math.min(l,ri,b,t);
+      if(m===l)pos.x=c.x0-r;else if(m===ri)pos.x=c.x1+r;
+      else if(m===b)pos.z=c.z0-r;else pos.z=c.z1+r;
+    }
+  }
+}
+
 /* ---------------- input (first person) ---------------- */
 var keys={}, yaw=0, pitch=-0.05, locked=false, mouseDown=false;
 var prevE=false, prevQ=false;
 var lookDX=0, lookDY=0;
 
 document.addEventListener('keydown',function(e){
+  if(shopOpen){
+    keys[e.code]=false;
+    if(e.code==='Escape'||e.code==='KeyE'||e.code==='KeyX'){
+      closeShop();e.preventDefault();
+    }
+    return;
+  }
   keys[e.code]=true;
   if(state.mode==='game' &&
      ['KeyW','KeyA','KeyS','KeyD','Space','KeyE','KeyQ'].indexOf(e.code)>=0)
@@ -1197,6 +1882,7 @@ document.addEventListener('keydown',function(e){
 document.addEventListener('keyup',function(e){keys[e.code]=false;});
 canvas.addEventListener('mousedown',function(e){
   if(state.mode!=='game')return;
+  if(shopOpen)return;                     /* clicks belong to the shop window */
   if(!locked){
     try{ if(canvas.requestPointerLock)canvas.requestPointerLock(); }catch(err){}
     return;
@@ -1297,14 +1983,18 @@ function findTarget(){
   if(!lp.carry){
     BINS.forEach(function(b){
       d=dist2(lp.pos.x,lp.pos.z,b.x,b.z);
-      if(d<2.8&&(!best||d<best.d))best={type:'bin',bin:b,d:d};
+      if(d<2.8&&(!best||d<best.d))
+        best={type:'bin',bin:b,d:d,empty:(inv[b.n]||0)<=0};
     });
   }
   [1,2,3].forEach(function(k){
     var s=TOOL_SPOTS[k];
+    if((inv['t'+k]||0)<=0)return;
     d=dist2(lp.pos.x,lp.pos.z,s.x,s.z);
     if(d<2.8&&(!best||d<best.d))best={type:'tool',spot:s,d:d};
   });
+  d=dist2(lp.pos.x,lp.pos.z,SHOP_SPOT.x,SHOP_SPOT.z);
+  if(d<2.9&&(!best||d<best.d))best={type:'shop',d:d};
   if(itemC&&(!best||itemC.d<best.d))best=itemC;
   return best;
 }
@@ -1313,9 +2003,16 @@ function workState(t,lp){
   if(!t||t.type!=='part')return null;
   var ph=phaseOf(t.part);
   if(ph==='done')return {ok:true,ph:'done'};
+  if(ph==='paint'){
+    if(lp.carry!=='Paint')return {ok:false,ph:ph,
+      msg:'Grab a <b>Paint</b> can from the paint bin (right of the parts rack)'};
+    return {ok:true,ph:ph};
+  }
   if(ph==='remove'){
     if(lp.carry)return {ok:false,ph:ph,msg:'Put down the <b>'+escapeHtml(lp.carry)+'</b> first — press <b>Q</b>'};
     var need=PART_TOOL[t.part.n];
+    if(!need)return {ok:false,ph:ph,
+      msg:'No tool needed for this one — hold <b>E</b> with empty hands'};
     if(lp.tool!==need)return {ok:false,ph:ph,needTool:need,
       msg:'Grab the <b>'+TOOLS[need].name+'</b> from the tool wall'};
     return {ok:true,ph:ph};
@@ -1343,6 +2040,10 @@ function updateHUD(){
         escapeHtml(cName)+'</span> car';
       $('barFill').style.width=Math.round(t.part.p*200)+'%';
       $('promptHint').innerHTML='hold <b>E</b> / <b>LMB</b> &nbsp;·&nbsp; needs tool';
+    }else if(ws.ph==='paint'){
+      $('promptText').innerHTML='Spray-paint the <span>'+escapeHtml(cName)+'</span> car';
+      $('barFill').style.width=Math.round(t.part.p*100)+'%';
+      $('promptHint').innerHTML='hold <b>E</b> / <b>LMB</b> &nbsp;·&nbsp; spraying with the paint can';
     }else{
       $('promptText').innerHTML='Install the new <span>'+escapeHtml(t.part.n)+'</span> in the <span>'+
         escapeHtml(cName)+'</span> car';
@@ -1373,12 +2074,19 @@ function updateHUD(){
     cross.className='on';
   }else if(t&&t.type==='bin'){
     $('prompt').style.display='block';
-    $('promptText').innerHTML='Take the <span>'+escapeHtml(t.bin.n)+'</span> spare part';
-    $('promptReq').className='req';
-    $('promptReq').innerHTML='press <b>E</b> to pick it up with both hands';
+    if(t.empty){
+      $('promptText').innerHTML='The <span>'+escapeHtml(t.bin.n)+'</span> bin is <span>empty</span>';
+      $('promptReq').className='req bad';
+      $('promptReq').innerHTML='buy spares at the <b>shop computer</b> — they drop by the desk';
+      cross.className='need';
+    }else{
+      $('promptText').innerHTML='Take the <span>'+escapeHtml(t.bin.n)+'</span> spare part';
+      $('promptReq').className='req';
+      $('promptReq').innerHTML='press <b>E</b> to pick it up with both hands';
+      cross.className='on';
+    }
     $('promptBar').style.display='none';
     $('promptHint').innerHTML='press <b>E</b> &nbsp;·&nbsp; <b>Q</b> throws it on the floor';
-    cross.className='on';
   }else if(t&&t.type==='tool'){
     $('prompt').style.display='block';
     $('promptText').innerHTML='Take the <span>'+TOOLS[t.spot.k].name.toLowerCase()+'</span>';
@@ -1386,6 +2094,14 @@ function updateHUD(){
     $('promptReq').innerHTML='press <b>E</b> to grab it — starts in your right hand';
     $('promptBar').style.display='none';
     $('promptHint').innerHTML='press <b>E</b> &nbsp;·&nbsp; <b>Q</b> throws it on the floor';
+    cross.className='on';
+  }else if(t&&t.type==='shop'){
+    $('prompt').style.display='block';
+    $('promptText').innerHTML='Use the <span>shop computer</span>';
+    $('promptReq').className='req';
+    $('promptReq').innerHTML='press <b>E</b> — spare tools &amp; upgrades for the cash you earn';
+    $('promptBar').style.display='none';
+    $('promptHint').innerHTML='the whole crew shares the stock and the upgrades';
     cross.className='on';
   }else{
     $('prompt').style.display='none';
@@ -1407,7 +2123,91 @@ function updateHUD(){
     $('handName').textContent='EMPTY';
   }
   updateJobs();
+  shopTick();
 }
+
+/* ---------------- shop terminal UI (shared cart overlay) ---------------- */
+var shopOpen=false, cart=[], shopSig='';
+function openShop(){
+  if(state.mode!=='game'||shopOpen)return;
+  shopOpen=true;cart=[];
+  $('shopOv').style.display='flex';
+  if(document.exitPointerLock){try{document.exitPointerLock();}catch(e){}}
+  shopSig='';shopTick();
+  SFX.pickup();
+}
+function closeShop(){
+  if(!shopOpen)return;
+  shopOpen=false;cart=[];
+  $('shopOv').style.display='none';
+  keys.KeyE=false;keys.KeyQ=false;
+}
+function renderShop(){
+  $('shopMoney').textContent=money;
+  var html='';
+  SHOP.forEach(function(it){
+    var owned=it.kind==='up'&&ups[it.f];
+    var sold=it.kind==='tool'&&(stock[it.id]||0)<=0;
+    var dis=owned||sold;
+    html+='<div class="srow'+(dis?' off':'')+'">'
+      +'<div class="sic">'+(it.kind==='tool'?TOOLS[it.v].icon
+        :(it.kind==='part'?(PART_ICON[it.v]||'\u{1F4E6}'):it.icon))+'</div>'
+      +'<div class="sinfo"><div class="sn">'+escapeHtml(it.n)+'</div>'
+      +'<div class="sd">'+escapeHtml(it.desc)+'</div></div>'
+      +'<div class="sstock">'+(it.kind==='tool'?('stock '+(stock[it.id]||0)+'/'+it.stock)
+        :(it.kind==='part'?'spare part':(owned?'OWNED':'one-time')))+'</div>'
+      +'<button class="sadd" data-id="'+it.id+'"'+(dis?' disabled':'')+'>+ $'+it.price+'</button>'
+      +'</div>';
+  });
+  $('shopList').innerHTML=html;
+  var total=0,ct='';
+  cart.forEach(function(id){
+    var it=shopItem(id);if(!it)return;
+    total+=it.price;
+    ct+='<span class="cchip" data-id="'+it.id+'">'+escapeHtml(it.n)+' <b>$'+it.price+' \u{2715}</b></span> ';
+  });
+  $('shopCart').innerHTML=ct||'cart is empty &mdash; click <b>+ $</b> on an item';
+  $('shopBuy').disabled=!cart.length||total>money;
+  $('shopBuy').textContent=cart.length?('BUY  $'+total):'BUY';
+}
+function shopTick(){
+  if(!shopOpen)return;
+  var sig=money+'|'+cart.join(',')+'|'+SHOP.map(function(it){
+    return it.kind==='up'?ups[it.f]:(stock[it.id]||0);
+  }).join(',');
+  if(sig!==shopSig){shopSig=sig;renderShop();}
+}
+function shopAdd(id){
+  var it=shopItem(id);if(!it)return;
+  if(it.kind==='up'){if(ups[it.f])return;}
+  else if(it.kind==='tool'){
+    var inCart=cart.filter(function(x){return x===id;}).length;
+    if(inCart>=(stock[it.id]||0))return;
+  }
+  cart.push(id);shopSig='';shopTick();SFX.pickup();
+}
+function shopRemove(id){
+  for(var i=cart.length-1;i>=0;i--)if(cart[i]===id){cart.splice(i,1);break;}
+  shopSig='';shopTick();
+}
+function shopBuyNow(){
+  if(!cart.length)return;
+  if(isHost)hostBuy(localId,cart.slice());
+  else if(conn&&conn.open){try{conn.send({t:'buy',ids:cart.slice()});}catch(e){}}
+  cart=[];closeShop();
+}
+(function initShop(){
+  $('shopList').addEventListener('click',function(e){
+    var b=e.target.closest?e.target.closest('.sadd'):null;
+    if(b&&!b.disabled&&b.getAttribute('data-id'))shopAdd(b.getAttribute('data-id'));
+  });
+  $('shopCart').addEventListener('click',function(e){
+    var c=e.target.closest?e.target.closest('.cchip'):null;
+    if(c&&c.getAttribute('data-id'))shopRemove(c.getAttribute('data-id'));
+  });
+  $('shopBuy').addEventListener('click',shopBuyNow);
+  $('shopX').addEventListener('click',closeShop);
+})();
 
 /* what is on the todo list right now */
 function updateJobs(){
@@ -1469,8 +2269,8 @@ var switchDip=0, bobT=0, useT=0;
 
   vmCarryVis.position.set(0,-0.16,-0.95);
   viewScene.add(vmCarryVis);
-  ['Engine','Tire','Bumper'].forEach(function(n){
-    var s=buildSpare(n,n==='Bumper'?0.5:0.62);
+  CARRY_PARTS.forEach(function(n){
+    var s=buildSpare(n,carryScale(n,0.62));
     s.visible=false;vmCarryVis.add(s);vmCarries[n]=s;
   });
 })();
@@ -1478,7 +2278,7 @@ var switchDip=0, bobT=0, useT=0;
 function updateViewmodel(dt,info){
   var k=1-Math.exp(-14*dt);
   [1,2,3].forEach(function(n){vmTools[n].visible=(n===info.tool&&info.tool>0&&!info.carry);});
-  ['Engine','Tire','Bumper'].forEach(function(n){vmCarries[n].visible=(n===info.carry);});
+  CARRY_PARTS.forEach(function(n){vmCarries[n].visible=(n===info.carry);});
   vmCarryVis.visible=!!info.carry;
   if(switchDip>0)switchDip=Math.max(0,switchDip-dt);
 
@@ -1550,6 +2350,7 @@ function updateViewmodel(dt,info){
 
 /* ---------------- local player (first person) ---------------- */
 function updateLocal(p,dt){
+  if(shopOpen){p.moving=false;p.fixing=false;p.fixAccum=0;return;}
   var fwdX=-Math.sin(yaw), fwdZ=-Math.cos(yaw);
   var rgtX=Math.cos(yaw),  rgtZ=-Math.sin(yaw);
   var mx=0,mz=0;
@@ -1559,7 +2360,7 @@ function updateLocal(p,dt){
   if(keys.KeyA)mx-=1;
   var len=Math.hypot(mx,mz);
   var moving=len>0;
-  var speed=(keys.ShiftLeft||keys.ShiftRight)?CFG.run:CFG.walk;
+  var speed=((keys.ShiftLeft||keys.ShiftRight)?CFG.run:CFG.walk)*walkMul();
   if(moving){
     mx/=len;mz/=len;
     var dx=(rgtX*mx+fwdX*mz)*speed*dt;
@@ -1567,6 +2368,7 @@ function updateLocal(p,dt){
     p.pos.x+=dx;p.pos.z+=dz;
     clampPlayer(p.pos);
     cars.forEach(function(c){collideCar(p.pos,c);});
+    collideProps(p.pos);
     clampPlayer(p.pos);
     p.phase+=dt*speed*1.9;
     bobT+=dt*speed*1.6;
@@ -1615,7 +2417,8 @@ function updateLocal(p,dt){
   if(eDown&&!prevE){
     if(t&&t.type==='item')takeItem(t.item);
     else if(t&&t.type==='tool')grab('tool',t.spot.k);
-    else if(t&&t.type==='bin')grab('part',t.bin.n);
+    else if(t&&t.type==='bin'&&!t.empty)grab('part',t.bin.n);
+    else if(t&&t.type==='shop')openShop();
   }
   if(!prevQ&&keys.KeyQ)throwHeld();
   prevE=eDown;prevQ=!!keys.KeyQ;
@@ -1625,7 +2428,7 @@ function updateLocal(p,dt){
   if(t&&t.type==='part'&&ws&&ws.ok&&ws.ph!=='done'&&(eDown||mouseDown)){
     using=true;
     SFX.hit();
-    p.fixAccum+=dt;
+    p.fixAccum+=dt*fixRateMul();
     if(p.fixAccum>=0.1){
       if(isHost){applyFix(p.id,t.car.id,t.idx,p.fixAccum);sendSnap();}
       else if(conn&&conn.open){
@@ -1643,6 +2446,8 @@ function updateLocal(p,dt){
   poseChar(p,p.phase);
 
   p.net.x=p.pos.x;p.net.y=p.pos.y;p.net.z=p.pos.z;p.net.ry=p.ry;
+  p.net.pi=clamp(pitch,-1.45,1.45);   /* share how far we look up/down */
+  p.pitch=p.net.pi;
   p.net.fixing=using;p.net.tool=p.tool;p.net.carry=p.carry;
 }
 
@@ -1669,9 +2474,11 @@ function hostSpawnCar(){
   for(var i=0;i<BAYS.length;i++)if(!BAYS[i].busy){bay=BAYS[i];break;}
   if(!bay)return false;
   bay.busy=true;
-  var defs=shuffle(PART_DEFS).slice(0,Math.random()<0.5?1:(Math.random()<0.6?2:3));
+  var defs=shuffle(PART_DEFS).slice(0,2+Math.floor(Math.random()*3));
   var parts=defs.map(function(d){return {n:d.name,p:0};});
-  var car=addCar({i:++carUid,c:pick(CAR_COLORS),x:ENTRY.x,z:ENTRY.z,r:Math.PI,s:'in',
+  var cc=pick(CAR_COLORS);
+  var pool=CAR_COLORS.filter(function(x){return x!==cc;});
+  var car=addCar({i:++carUid,c:cc,pc:pick(pool),x:ENTRY.x,z:ENTRY.z,r:Math.PI,s:'in',
     p:parts.map(function(p){return [p.n,0];})});
   car.path=[[0,15],[bay.x,8],[bay.x,bay.z]];
   car.wp=0;car.bay=bay;
@@ -1682,7 +2489,7 @@ function hostTick(dt){
   tickFloorItems(dt);
   spawnCd-=dt;
   if(spawnCd<=0){
-    if(hostSpawnCar())spawnCd=11;else spawnCd=1.5;
+    if(hostSpawnCar())spawnCd=(ups.car?6.6:11);else spawnCd=1.5;
   }
   cars.forEach(function(car){
     if(car.st==='in'||car.st==='out'){
@@ -1723,17 +2530,26 @@ function hostGrab(p,kind,v){
     if(!TOOLS[v])return;
     var s=TOOL_SPOTS[v];if(!s)return;
     if(dist2(p.net.x,p.net.z,s.x,s.z)>3.0)return;
+    if((inv['t'+v]||0)<=0){
+      shopTell(p.id,TOOLS[v].name+' is already in someone\u2019s hands');return;
+    }
+    inv['t'+v]--;
     p.tool=v;p.net.tool=v;
     p.carry='';p.net.carry='';
   }else if(kind==='part'){
-    if(PARTS_RACK.indexOf(v)<0)return;
     var b=null;BINS.forEach(function(x){if(x.n===v)b=x;});
     if(!b)return;
     if(dist2(p.net.x,p.net.z,b.x,b.z)>3.0)return;
+    if((inv[v]||0)<=0){
+      shopTell(p.id,'The '+v+' bin is empty — buy spares at the shop computer');return;
+    }
+    inv[v]--;
     p.carry=v;p.net.carry=v;
     p.tool=0;p.net.tool=0;
   }else return;
   setCharGear(p);
+  updateStockVisuals();
+  sendSnap();
 }
 function hostDrop(p){
   p.tool=0;p.net.tool=0;p.carry='';p.net.carry='';
@@ -1756,6 +2572,7 @@ function applyFix(id,carId,idx,dt){
   if(part.p>=1){
     money+=CFG.partPay;
     if(p.carry===part.n){p.carry='';p.net.carry='';setCharGear(p);}
+    if(part.n==='Paint')car.color=car.pcol||car.color;   /* fresh paint is on! */
     var all=true;
     car.parts.forEach(function(pp){if(pp.p<1)all=false;});
     if(all){car.st='turn';money+=CFG.carPay;carsFixed++;}
@@ -1792,6 +2609,7 @@ function hostHandleData(c,d){
   }else if(d.t==='p'){
     var pl=players.get(c.peer);if(!pl)return;
     pl.net.x=d.x;pl.net.y=d.y;pl.net.z=d.z;pl.net.ry=d.r;pl.net.fixing=!!d.f;
+    if(typeof d.pi==='number')pl.net.pi=clamp(d.pi,-1.45,1.45);
     /* tool / carry are host-authoritative (changed only by grab / drop / install) */
   }else if(d.t==='grab'){
     var pg=players.get(c.peer);if(pg)hostGrab(pg,d.k,d.v);
@@ -1803,6 +2621,8 @@ function hostHandleData(c,d){
     var pk=players.get(c.peer);if(pk)hostTake(pk,d.i);
   }else if(d.t==='fix'){
     if(isHost)applyFix(c.peer,d.c,d.p,d.d);
+  }else if(d.t==='buy'){
+    if(isHost)hostBuy(c.peer,d.ids);
   }
 }
 function hostSend(msg,target){
@@ -1813,16 +2633,17 @@ function buildSnap(){
   var ps=[],cs=[];
   players.forEach(function(p){
     ps.push({i:p.id,n:p.name,c:p.color,x:r2(p.net.x),y:r2(p.net.y),z:r2(p.net.z),
-      r:+p.net.ry.toFixed(2),f:p.net.fixing?1:0,tl:p.tool,cr:p.carry});
+      r:+p.net.ry.toFixed(2),pi:+(+p.net.pi||0).toFixed(2),
+      f:p.net.fixing?1:0,tl:p.tool,cr:p.carry});
   });
   cars.forEach(function(c){
-    cs.push({i:c.id,c:c.color,x:r2(c.x),z:r2(c.z),r:+c.ry.toFixed(2),s:c.st,
+    cs.push({i:c.id,c:c.color,pc:c.pcol,x:r2(c.x),z:r2(c.z),r:+c.ry.toFixed(2),s:c.st,
       p:c.parts.map(function(pp){return [pp.n,+pp.p.toFixed(2)];})});
   });
   var fis=floorItems.map(function(it){
     return {i:it.id,k:it.k,v:it.v,x:r2(it.x),y:+it.y.toFixed(2),z:r2(it.z)};
   });
-  return {t:'s',ps:ps,cs:cs,fi:fis,m:money,k:carsFixed};
+  return {t:'s',ps:ps,cs:cs,fi:fis,m:money,k:carsFixed,st:stock,up:ups,iv:inv};
 }
 function sendSnap(target){ if(isHost) hostSend(buildSnap(),target); }
 
@@ -1840,6 +2661,8 @@ function clientHandleData(d){
   }else if(d.t==='s'){
     if(!localId){msgQueue=d;return;}
     applySnap(d);
+  }else if(d.t==='shopmsg'){
+    showToast(String(d.m||'').slice(0,90),'#ff9bb0');
   }
 }
 function applySnap(s){
@@ -1849,7 +2672,7 @@ function applySnap(s){
     if(e.i===localId){
       var lp=players.get(localId);
       if(lp){
-        var myCr=(e.cr==='Engine'||e.cr==='Tire'||e.cr==='Bumper')?e.cr:'';
+        var myCr=CARRY_PARTS.indexOf(String(e.cr))>=0?e.cr:'';
         if(lp.carry!==myCr){
           if(myCr===''&&performance.now()<holdGuard){/* keep fresh pickup */}
           else{lp.carry=myCr;lp.net.carry=myCr;setCharGear(lp);}
@@ -1864,6 +2687,7 @@ function applySnap(s){
     var p=players.get(e.i);
     if(!p){p=addPlayer(e.i,nm,col,false,{x:e.x,z:e.z});rosterDirty=true;}
     p.net.x=e.x;p.net.y=e.y;p.net.z=e.z;p.net.ry=e.r;p.net.fixing=!!e.f;
+    if(typeof e.pi==='number')p.net.pi=clamp(e.pi,-1.45,1.45);
     if(p.name!==nm||p.color!==col){
       p.name=nm;p.color=col;
       p.mesh.remove(p.tag);
@@ -1873,7 +2697,7 @@ function applySnap(s){
     var gearChanged=false;
     var tl=TOOLS[e.tl]?e.tl:0;
     if(p.tool!==tl){p.tool=tl;p.net.tool=tl;gearChanged=true;}
-    var cr=(e.cr==='Engine'||e.cr==='Tire'||e.cr==='Bumper')?e.cr:'';
+    var cr=CARRY_PARTS.indexOf(String(e.cr))>=0?e.cr:'';
     if(p.carry!==cr){p.carry=cr;p.net.carry=cr;gearChanged=true;}
     if(gearChanged)setCharGear(p);
   });
@@ -1886,6 +2710,10 @@ function applySnap(s){
     var c=cars.get(e.i);
     if(!c){c=addCar(e);rosterDirty=true;}
     c.nx=e.x;c.nz=e.z;c.nry=e.r;c.st=e.s;
+    if(e.pc)c.pcol=e.pc;
+    if(e.c!==undefined&&e.c!==c.color){
+      c.color=e.c;c.scuff=mixHex(c.color,0x6e7278,0.62);
+    }
     c.parts.forEach(function(pp,i){if(e.p[i])pp.p=e.p[i][1];});
   });
   cars.forEach(function(c,id){if(!carSeen[id])removeCar(id);});
@@ -1912,6 +2740,10 @@ function applySnap(s){
     for(var tk in takenItems){if(now-takenItems[tk]>1500)delete takenItems[tk];}
   }
   money=s.m;carsFixed=s.k;
+  if(s.st)stock=s.st;
+  if(s.up)ups=s.up;
+  if(s.iv){inv=s.iv;updateStockVisuals();}
+  updateNeonSign();
   updateRoster(s.ps);
 }
 
@@ -1919,6 +2751,51 @@ function startHosting(){
   if(typeof Peer==='undefined'){msg('Network library failed to load. Check your internet connection.');resetButtons();return;}
   msg('Creating room...');
   makeHostPeer(genCode(),0);
+}
+/* shared handlers for every host-side peer object */
+function hostOnConnection(c){
+  if(conns.indexOf(c)<0)conns.push(c);
+  log('incoming connection');
+  c.on('open',function(){log('host: channel open with',c.peer);});
+  c.on('data',function(d){hostHandleData(c,d);});
+  c.on('close',function(){
+    var p=players.get(c.peer);
+    if(p){showToast(p.name+' left','#ff9bb0');removePlayer(c.peer);}
+    conns=conns.filter(function(x){return x!==c;});
+  });
+  c.on('error',function(){});
+}
+/* quietly re-register the room code after a matchmaking-server hiccup,
+   without touching the live peer-to-peer connections */
+var reRegTimer=null;
+function scheduleReRegister(){
+  if(reRegTimer)return;
+  reRegTimer=setTimeout(function(){
+    reRegTimer=null;
+    if(state.mode!=='game'||!isHost)return;
+    var p;
+    try{ p=new Peer(PEER_PREFIX+myCode,{debug:0,config:cfgIce()}); }
+    catch(e){ scheduleReRegister(); return; }
+    var settled=false;
+    p.on('open',function(){
+      settled=true;
+      log('signaling re-registered as',p.id);
+      /* keep the old peer object (it owns the live data channels);
+         just point future joins at the fresh one */
+      peer=p;
+      p.on('connection',hostOnConnection);
+      p.on('error',function(e){
+        log('host peer error (re)',e.type);
+        if(state.mode==='game')scheduleReRegister();
+      });
+      showToast('Matchmaking back online — invites work again','#4cd97b');
+    });
+    p.on('error',function(e){
+      log('re-register failed',e.type);
+      try{p.destroy();}catch(x){}
+      if(!settled&&state.mode==='game')scheduleReRegister();
+    });
+  },4000);
 }
 function makeHostPeer(code,tries){
   if(peer){try{peer.destroy();}catch(x){}peer=null;}
@@ -1934,22 +2811,23 @@ function makeHostPeer(code,tries){
     log('hosting as',peer.id);
     enterGame(true);
   });
-  peer.on('connection',function(c){
-    if(conns.indexOf(c)<0)conns.push(c);
-    log('incoming connection');
-    c.on('data',function(d){hostHandleData(c,d);});
-    c.on('close',function(){
-      var p=players.get(c.peer);
-      if(p){showToast(p.name+' left','#ff9bb0');removePlayer(c.peer);}
-      conns=conns.filter(function(x){return x!==c;});
-    });
-    c.on('error',function(){});
-  });
+  peer.on('connection',hostOnConnection);
   peer.on('error',function(e){
     log('host peer error',e.type);
     if(e.type==='unavailable-id'&&tries<4){
       msg('Code taken, trying another...');
       makeHostPeer(genCode(),tries+1);
+      return;
+    }
+    /* the match itself is peer-to-peer: a matchmaking hiccup must never
+       kick players out of a game that is still running fine */
+    if(state.mode==='game'){
+      var live=false;
+      conns.forEach(function(c){if(c&&c.open)live=true;});
+      showToast(live
+        ? 'Matchmaking dropped — still playing, reconnecting…'
+        : 'Matchmaking dropped — reconnecting…','#ffd166');
+      scheduleReRegister();
       return;
     }
     msg('Network error: '+(e.type||(e&&e.message)||'unknown'));
@@ -1965,7 +2843,9 @@ function makeHostPeer(code,tries){
     }
   },10000);
 }
+var joinNetTries=0, joinRetryTimer=null;
 function startJoining(code){
+  clearTimeout(joinRetryTimer);joinRetryTimer=null;
   if(typeof Peer==='undefined'){msg('Network library failed to load. Check your internet connection.');resetButtons();return;}
   if(!code){msg('Enter a room code first.');resetButtons();return;}
   if(peer){try{peer.destroy();}catch(e){}peer=null;}
@@ -1977,6 +2857,8 @@ function startJoining(code){
   var done=false;
   var fail=function(text){
     if(done)return;done=true;
+    joinNetTries=0;
+    clearTimeout(joinRetryTimer);joinRetryTimer=null;
     msg(text);
     resetButtons();
     if(state.mode==='game')backToMenu(text);
@@ -1985,13 +2867,14 @@ function startJoining(code){
   };
   var watchdog=setTimeout(function(){
     if(!done)fail('Could not connect to room '+code+' — try again.');
-  },12000);
+  },20000);
 
   peer.on('open',function(){
     log('client peer open, connecting to',code);
     conn=peer.connect(PEER_PREFIX+code,{reliable:true});
     conn.on('open',function(){
       done=true;clearTimeout(watchdog);
+      joinNetTries=0;
       log('connected to host');
       isHost=false;
       conn.send({t:'join',n:$('nameIn').value.trim().slice(0,14)||'Mechanic',c:selectedColor});
@@ -2008,7 +2891,23 @@ function startJoining(code){
   peer.on('error',function(e){
     log('client peer error',e.type);
     clearTimeout(watchdog);
+    if(state.mode==='game'&&conn&&conn.open){
+      /* the P2P channel is alive — a signaling hiccup must not end the match */
+      showToast('Connection hiccup — still playing','#ffd166');
+      return;
+    }
     if(e.type==='peer-unavailable')fail('Room "'+code+'" not found. Check the code.');
+    else if(e.type==='network'&&joinNetTries<2){
+      /* transient matchmaking hiccup — quietly reconnect instead of giving up */
+      joinNetTries++;
+      msg('Matchmaking hiccup — reconnecting ('+joinNetTries+'/2)…');
+      try{peer.destroy();}catch(x){}peer=null;
+      joinRetryTimer=setTimeout(function(){
+        joinRetryTimer=null;
+        if(!done&&state.mode!=='game')startJoining(code);
+      },1500);
+      return;
+    }
     else fail('Network error: '+(e.type||e.message||'unknown'));
   });
 }
@@ -2023,7 +2922,7 @@ function sendPos(dt){
   var p=players.get(localId);if(!p)return;
   try{
     conn.send({t:'p',x:r2(p.pos.x),y:r2(p.pos.y),z:r2(p.pos.z),
-      r:+p.ry.toFixed(2),f:p.fixing?1:0,tl:p.tool,cr:p.carry});
+      r:+p.ry.toFixed(2),pi:+p.net.pi.toFixed(2),f:p.fixing?1:0,tl:p.tool,cr:p.carry});
   }catch(e){}
 }
 
@@ -2038,6 +2937,8 @@ function enterGame(host){
   $('netStatus').innerHTML=host?'HOST &middot; waiting for friends...':'connecting...';
   $('lockHint').style.display='block';
   money=0;carsFixed=0;rosterDirty=true;lastRosterKey='';
+  resetShop();
+  resetInv();
   spawnCd=0;
   if(host){
     var p=addPlayer(localId,$('nameIn').value.trim().slice(0,14)||'Mechanic',selectedColor,true,{x:0,z:5});
@@ -2057,6 +2958,7 @@ function backToMenu(reason){
   floorItems=[];takenItems={};floorUid=0;
   BAYS.forEach(function(b){b.busy=false;});
   money=0;carsFixed=0;mouseDown=false;prevE=prevQ=false;
+  resetShop();resetInv();closeShop();
   if(document.exitPointerLock){try{document.exitPointerLock();}catch(e){}}
   $('hud').style.display='none';
   $('menu').style.display='flex';
@@ -2094,6 +2996,7 @@ function checkPayouts(){
 /* ---------------- main loop ---------------- */
 var clock=new THREE.Clock();
 var fpsAcc=0,fpsFrames=0,forcedDt=null;
+var pcA=new THREE.Color(), pcB=new THREE.Color();
 function loop(){
   requestAnimationFrame(loop);
   var real=clock.getDelta();
@@ -2118,6 +3021,7 @@ function loop(){
       p.pos.y+=(p.net.y-p.pos.y)*k;
       p.pos.z+=(p.net.z-p.pos.z)*k;
       p.ry=lerpAngle(p.ry,p.net.ry,k);
+      p.pitch+=(p.net.pi-p.pitch)*k;      /* smooth head look up/down */
       p.moving=Math.hypot(p.pos.x-oldx,p.pos.z-oldz)>0.004;
       if(p.moving)p.phase+=dt*11;
       if(p.net.fixing)p.phase+=dt*3;
@@ -2175,6 +3079,20 @@ function loop(){
         m.material.emissive.setRGB(0.35*Math.abs(Math.sin(t*5)),0.05,0.05);
       }
     });
+    if(ud.bodyMats){
+      var pnt=null;
+      car.parts.forEach(function(q){if(q.n==='Paint')pnt=q;});
+      if(pnt&&pnt.p<1){
+        pcA.setHex(car.scuff||0x777c82);
+        pcB.setHex(car.color);
+        pcA.lerp(pcB,pnt.p);
+        ud.bodyMats[0].color.copy(pcA);
+        ud.bodyMats[1].color.copy(pcA).offsetHSL(0,0,0.07);
+      }else{
+        ud.bodyMats[0].color.setHex(car.color);
+        ud.bodyMats[1].color.setHex(shade(car.color,0.08));
+      }
+    }
     if(ud.smoke.length){
       var engRemoved=eng&&phaseOf(eng)!=='remove';
       var active=eng&&phaseOf(eng)==='remove'&&car.st==='wait';
@@ -2194,7 +3112,12 @@ function loop(){
     fpsAcc=0;fpsFrames=0;
   }
 
+  if(skyMesh)skyMesh.rotation.y+=dt*0.0012;
+  tickClock(t);
+  var pn=performance.now();
+  if(pn>=shadowNext){renderer.shadowMap.needsUpdate=true;shadowNext=pn+80;}
   updateCamera(dt);
+  updateMirror();
   renderer.clear();
   renderer.render(scene,camera);
   if(state.mode==='game'&&players.get(localId)){
@@ -2257,6 +3180,7 @@ window.__game={
   players:function(){
     var a=[];players.forEach(function(p){a.push({id:p.id,name:p.name,x:+p.pos.x.toFixed(2),
       z:+p.pos.z.toFixed(2),ry:+p.ry.toFixed(2),netry:+p.net.ry.toFixed(2),
+      pi:+(+p.net.pi||0).toFixed(2),hd:+((p.mesh.userData.head.rotation.x)||0).toFixed(2),
       tool:p.tool,carry:p.carry,local:p.isLocal});});
     return a;
   },
@@ -2266,6 +3190,16 @@ window.__game={
     return a;
   },
   money:function(){return money;},
+  inv:function(o){
+    if(o){for(var k in o)inv[k]=Math.max(0,o[k]|0);updateStockVisuals();}
+    return JSON.parse(JSON.stringify(inv));
+  },
+  shop:function(){return {open:shopOpen,cart:cart.slice(),money:money,
+    stock:JSON.parse(JSON.stringify(stock)),ups:JSON.parse(JSON.stringify(ups)),
+    items:SHOP.map(function(it){return it.id+':'+it.price;})};},
+  openShop:openShop, closeShop:closeShop,
+  buy:function(ids){hostBuy(localId,ids);},
+  earn:function(n){money+=n;sendSnap();return money;},
   parts:function(){
     var a=[];
     cars.forEach(function(c){
@@ -2283,6 +3217,20 @@ window.__game={
   moveTo:function(x,z){var p=players.get(localId);if(p){p.pos.x=x;p.pos.z=z;p.net.x=x;p.net.z=z;}},
   look:function(y,p){yaw=y;pitch=p;},
   sfx:function(n){try{if(SFX[n])SFX[n]();return 'ok:'+n;}catch(e){return 'ERR:'+e.message;}},
+  mirror:function(){
+    if(!mirrorRT)return 'no-rt';
+    var out={stats:MSTAT,visible:mirrorMesh?mirrorMesh.visible:null,
+      pos:mirrorMesh?[+mirrorMesh.position.x.toFixed(2),+mirrorMesh.position.y.toFixed(2),+mirrorMesh.position.z.toFixed(2)]:null,
+      camPos:[+mirrorCam.position.x.toFixed(2),+mirrorCam.position.y.toFixed(2),+mirrorCam.position.z.toFixed(2)]};
+    try{
+      var buf=new Uint8Array(4);
+      out.px=[[12,12],[192,192],[372,372],[96,300],[300,75]].map(function(p){
+        renderer.readRenderTargetPixels(mirrorRT,p[0],p[1],1,1,buf);
+        return [buf[0],buf[1],buf[2]];
+      });
+    }catch(e){out.err=e.message;}
+    return out;
+  },
   probe:function(nx,ny,minY){
     var rc=new THREE.Raycaster();
     rc.setFromCamera(new THREE.Vector2(nx,ny),camera);
@@ -2302,6 +3250,17 @@ window.__game={
     return 'miss';
   },
   setKeys:function(o){for(var k in o)keys[k]=o[k];},
+  gear:function(){
+    var lp=players.get(localId),out={vm:{},char:{}};
+    CARRY_PARTS.forEach(function(n){
+      out.vm[n]=!!vmCarries[n].visible;
+      out.char[n]=!!(lp&&lp.mesh&&lp.mesh.userData.carries[n].visible);
+    });
+    out.tools={};
+    [1,2,3].forEach(function(k){out.tools[k]=!!(vmTools[k]&&vmTools[k].visible);});
+    out.hands=lp?{tool:lp.tool,carry:lp.carry}:null;
+    return out;
+  },
   frame:function(n,dt){forcedDt=dt||0.033;try{for(var i=0;i<(n||1);i++)loop();}finally{forcedDt=null;}},
   forceUse:function(b){mouseDown=!!b;keys.KeyE=!!b;},
   connState:function(){return {host:isHost,peer:!!peer,connOpen:!!(conn&&conn.open),
